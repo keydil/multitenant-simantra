@@ -232,6 +232,13 @@ export type Database = {
         Args: { p_entry_id: string };
         Returns: number;
       };
+      // See scripts/06-rpc-create-public-queue-entry.sql — replaces the old
+      // .from('queue_entries').insert(...).select().single() pattern, which
+      // broke once anon lost SELECT (RETURNING needs it too).
+      create_public_queue_entry: {
+        Args: { p_tenant_slug: string; p_queue_id: string };
+        Returns: Database['public']['Tables']['queue_entries']['Row'];
+      };
     };
   };
 };

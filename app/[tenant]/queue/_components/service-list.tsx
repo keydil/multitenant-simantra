@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useTenant } from '@/hooks/use-tenant';
 import { createClient } from '@/lib/supabase/client';
-import type { Queue } from '@/lib/types/queue';
+import type { Queue, QueueEntry } from '@/lib/types/queue';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import ServiceCard from './service-card';
@@ -34,25 +34,13 @@ export default function ServiceList() {
     setIsGenerating(true);
     try {
       const supabase = createClient();
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-
-      const { data: entriesToday } = await supabase.rpc('count_public_queue_entries_since', {
+      const { data: entry, error } = await supabase.rpc('create_public_queue_entry', {
+        p_tenant_slug: tenantSlug,
         p_queue_id: queue.id,
-        p_since: todayStart.toISOString(),
       });
 
-      const todayCount = (entriesToday ?? 0) + 1;
-      const ticketNumber = `${queue.service_code ?? queue.name.charAt(0).toUpperCase()}${String(todayCount).padStart(3, '0')}`;
-
-      const { data: entry, error } = await supabase
-        .from('queue_entries')
-        .insert({ queue_id: queue.id, tenant_id: tenant.id, ticket_number: ticketNumber, status: 'waiting', priority: 0 } as any)
-        .select()
-        .single();
-
       if (error || !entry) throw new Error('Gagal membuat tiket');
-      router.push(`/${tenantSlug}/queue/ticket/${(entry as any).id}`);
+      router.push(`/${tenantSlug}/queue/ticket/${(entry as QueueEntry).id}`);
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Terjadi kesalahan. Coba lagi.');
       setIsGenerating(false);
