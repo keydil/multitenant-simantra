@@ -34,12 +34,13 @@ export default function DisplayBoard() {
 
   const loadData = useCallback(async () => {
     if (!tenant) return;
-    const { data: qData } = await supabase.from('queues').select('*').eq('tenant_id', tenant.id).eq('is_active', true).order('service_code');
+    const { data: qData } = await supabase.rpc('get_public_queues', { p_tenant_slug: tenantSlug });
     if (qData) setQueues(qData as Queue[]);
 
-    const { data: eData } = await supabase.from('queue_entries').select('*')
-      .eq('tenant_id', tenant.id).in('status', ['waiting', 'serving', 'completed'])
-      .order('entered_at', { ascending: true });
+    const { data: eData } = await supabase.rpc('get_public_queue_entries', {
+      p_tenant_slug: tenantSlug,
+      p_statuses: ['waiting', 'serving', 'completed'],
+    });
     if (eData) {
       const newEntries = eData as QueueEntry[];
       // TTS for newly serving
@@ -57,21 +58,22 @@ export default function DisplayBoard() {
       prevServingRef.current = nowServing;
       setEntries(newEntries);
     }
-  }, [tenant, supabase, queues]);
+  }, [tenant, tenantSlug, supabase, queues]);
 
   useEffect(() => {
     loadData();
-    const ch = supabase.channel(`display-${tenant?.id ?? ''}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'queue_entries' }, loadData)
-      .subscribe();
+    // Polling replaces realtime: Supabase Realtime enforces RLS, and anon
+    // no longer has direct SELECT on queue_entries/queues (see
+    // MIGRATION_AUDIT.md Kritis #2 + scripts/05b-revoke-anon-direct-queue-select.sql).
+    const dataPoll = setInterval(loadData, 3000);
     const t = setInterval(() => {
       const now = new Date();
       setCurrentTime(now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
       setCurrentDate(now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }));
     }, 1000);
     const switchView = setInterval(() => setViewMode(v => v === 'grid' ? 'split' : 'grid'), 20000);
-    return () => { supabase.removeChannel(ch); clearInterval(t); clearInterval(switchView); };
-  }, [loadData, supabase, tenant?.id]);
+    return () => { clearInterval(dataPoll); clearInterval(t); clearInterval(switchView); };
+  }, [loadData]);
 
   const brand = tenant?.brand_color ?? '#1e40af';
 

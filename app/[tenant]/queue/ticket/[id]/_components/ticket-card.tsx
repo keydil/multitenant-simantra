@@ -26,19 +26,15 @@ export default function TicketCard() {
   const supabase = createClient();
 
   const fetchData = useCallback(async () => {
-    const { data: _entryData } = await supabase.from('queue_entries').select('*').eq('id', entryId).single();
-    if (!_entryData) { setLoading(false); return; }
-    const entryData = _entryData as any as QueueEntry;
-    setEntry(entryData);
+    const { data: entryData } = await supabase.rpc('get_public_queue_entry', { p_entry_id: entryId });
+    if (!entryData) { setLoading(false); return; }
+    setEntry(entryData as QueueEntry);
 
-    const { data: queueData } = await supabase.from('queues').select('*').eq('id', entryData.queue_id).single();
-    if (queueData) setQueue(queueData as any as Queue);
+    const { data: queueData } = await supabase.rpc('get_public_queue', { p_queue_id: (entryData as QueueEntry).queue_id });
+    if (queueData) setQueue(queueData as Queue);
 
-    const { count } = await supabase
-      .from('queue_entries').select('*', { count: 'exact', head: true })
-      .eq('queue_id', entryData.queue_id).eq('status', 'waiting')
-      .lt('entered_at', entryData.entered_at);
-    setPositionAhead(count ?? 0);
+    const { data: positionAhead } = await supabase.rpc('count_public_queue_position_ahead', { p_entry_id: entryId });
+    setPositionAhead(positionAhead ?? 0);
     setLoading(false);
   }, [entryId, supabase]);
 

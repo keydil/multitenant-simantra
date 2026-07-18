@@ -22,15 +22,10 @@ export default function ServiceList() {
   const fetchQueues = useCallback(async () => {
     if (!tenant) return;
     const supabase = createClient();
-    const { data } = await supabase
-      .from('queues')
-      .select('*')
-      .eq('tenant_id', tenant.id)
-      .eq('is_active', true)
-      .order('service_code');
+    const { data } = await supabase.rpc('get_public_queues', { p_tenant_slug: tenantSlug });
     if (data) setQueues(data as Queue[]);
     setQueuesLoading(false);
-  }, [tenant]);
+  }, [tenant, tenantSlug]);
 
   useEffect(() => { fetchQueues(); }, [fetchQueues]);
 
@@ -42,13 +37,12 @@ export default function ServiceList() {
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
 
-      const { count } = await supabase
-        .from('queue_entries')
-        .select('*', { count: 'exact', head: true })
-        .eq('queue_id', queue.id)
-        .gte('entered_at', todayStart.toISOString());
+      const { data: entriesToday } = await supabase.rpc('count_public_queue_entries_since', {
+        p_queue_id: queue.id,
+        p_since: todayStart.toISOString(),
+      });
 
-      const todayCount = (count ?? 0) + 1;
+      const todayCount = (entriesToday ?? 0) + 1;
       const ticketNumber = `${queue.service_code ?? queue.name.charAt(0).toUpperCase()}${String(todayCount).padStart(3, '0')}`;
 
       const { data: entry, error } = await supabase

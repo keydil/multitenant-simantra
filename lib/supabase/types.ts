@@ -19,6 +19,7 @@ export type Database = {
           'id' | 'created_at' | 'updated_at'
         >;
         Update: Partial<Database['public']['Tables']['tenants']['Insert']>;
+        Relationships: [];
       };
       tenant_users: {
         Row: {
@@ -38,6 +39,7 @@ export type Database = {
           'id' | 'created_at' | 'updated_at'
         >;
         Update: Partial<Database['public']['Tables']['tenant_users']['Insert']>;
+        Relationships: [];
       };
       queues: {
         Row: {
@@ -59,6 +61,7 @@ export type Database = {
           'id' | 'created_at' | 'updated_at'
         >;
         Update: Partial<Database['public']['Tables']['queues']['Insert']>;
+        Relationships: [];
       };
       queue_entries: {
         Row: {
@@ -80,6 +83,7 @@ export type Database = {
           'id' | 'entered_at'
         >;
         Update: Partial<Database['public']['Tables']['queue_entries']['Insert']>;
+        Relationships: [];
       };
       announcements: {
         Row: {
@@ -102,6 +106,7 @@ export type Database = {
           'id' | 'created_at' | 'updated_at' | 'published_at'
         >;
         Update: Partial<Database['public']['Tables']['announcements']['Insert']>;
+        Relationships: [];
       };
       analytics_daily: {
         Row: {
@@ -123,6 +128,7 @@ export type Database = {
           'id' | 'created_at'
         >;
         Update: Partial<Database['public']['Tables']['analytics_daily']['Insert']>;
+        Relationships: [];
       };
       tenant_themes: {
         Row: {
@@ -145,6 +151,7 @@ export type Database = {
           'id' | 'created_at' | 'updated_at'
         >;
         Update: Partial<Database['public']['Tables']['tenant_themes']['Insert']>;
+        Relationships: [];
       };
       guest_book: {
         Row: {
@@ -162,6 +169,7 @@ export type Database = {
           'id' | 'created_at'
         >;
         Update: Partial<Database['public']['Tables']['guest_book']['Insert']>;
+        Relationships: [];
       };
     };
     Views: {
@@ -181,6 +189,7 @@ export type Database = {
           updated_at: string;
           tenant_name: string;
         };
+        Relationships: [];
       };
       queue_status_summary: {
         Row: {
@@ -192,6 +201,36 @@ export type Database = {
           waiting_count: number;
           latest_entry_time: string | null;
         };
+        Relationships: [];
+      };
+    };
+    Functions: {
+      // Anon-safe RPCs — see scripts/05a-create-public-queue-rpcs.sql.
+      // Replace direct table SELECT on queue_entries/queues for anon
+      // (app/[tenant]/{display,queue}/**) once scripts/05b-... runs.
+      get_public_queues: {
+        Args: { p_tenant_slug: string };
+        Returns: Database['public']['Tables']['queues']['Row'][];
+      };
+      get_public_queue_entries: {
+        Args: { p_tenant_slug: string; p_statuses?: string[] | null };
+        Returns: Database['public']['Tables']['queue_entries']['Row'][];
+      };
+      get_public_queue_entry: {
+        Args: { p_entry_id: string };
+        Returns: Database['public']['Tables']['queue_entries']['Row'] | null;
+      };
+      get_public_queue: {
+        Args: { p_queue_id: string };
+        Returns: Database['public']['Tables']['queues']['Row'] | null;
+      };
+      count_public_queue_entries_since: {
+        Args: { p_queue_id: string; p_since: string };
+        Returns: number;
+      };
+      count_public_queue_position_ahead: {
+        Args: { p_entry_id: string };
+        Returns: number;
       };
     };
   };

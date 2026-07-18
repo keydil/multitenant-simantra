@@ -76,25 +76,20 @@ export default function StatusCard() {
   const supabase = createClient();
 
   const updatePositionAhead = useCallback(async (e: QueueEntry) => {
-    const { count } = await supabase
-      .from('queue_entries')
-      .select('*', { count: 'exact', head: true })
-      .eq('queue_id', e.queue_id).eq('status', 'waiting')
-      .lt('entered_at', e.entered_at);
-    setPositionAhead(count ?? 0);
+    const { data } = await supabase.rpc('count_public_queue_position_ahead', { p_entry_id: e.id });
+    setPositionAhead(data ?? 0);
   }, [supabase]);
 
   const loadInitial = useCallback(async () => {
-    const { data: _entryData } = await supabase.from('queue_entries').select('*').eq('id', entryId).single();
-    if (!_entryData) { setLoading(false); return; }
-    const entryData = _entryData as any as QueueEntry;
-    setEntry(entryData);
-    prevStatusRef.current = entryData.status as QueueStatus;
+    const { data: entryData } = await supabase.rpc('get_public_queue_entry', { p_entry_id: entryId });
+    if (!entryData) { setLoading(false); return; }
+    setEntry(entryData as QueueEntry);
+    prevStatusRef.current = (entryData as QueueEntry).status as QueueStatus;
 
-    const { data: queueData } = await supabase.from('queues').select('*').eq('id', entryData.queue_id).single();
-    if (queueData) setQueue(queueData as any as Queue);
+    const { data: queueData } = await supabase.rpc('get_public_queue', { p_queue_id: (entryData as QueueEntry).queue_id });
+    if (queueData) setQueue(queueData as Queue);
 
-    await updatePositionAhead(entryData);
+    await updatePositionAhead(entryData as QueueEntry);
     setLoading(false);
   }, [entryId, supabase, updatePositionAhead]);
 
@@ -108,39 +103,33 @@ export default function StatusCard() {
     loadInitial();
   }, [loadInitial]);
 
-  // Polling position ahead every 5s when waiting
+  // Polling every 3s (replaces realtime — Supabase Realtime enforces RLS,
+  // and anon no longer has direct SELECT on queue_entries; see
+  // MIGRATION_AUDIT.md Kritis #2). Also covers what the old separate
+  // "position ahead" poll did, so that effect was folded into this one.
   useEffect(() => {
-    if (!entry || entry.status !== 'waiting') return;
-    const interval = setInterval(() => updatePositionAhead(entry), 5000);
+    const poll = async () => {
+      const { data: updated } = await supabase.rpc('get_public_queue_entry', { p_entry_id: entryId });
+      if (!updated) return;
+      const entryData = updated as QueueEntry;
+      const newStatus = entryData.status as QueueStatus;
+      const oldStatus = prevStatusRef.current;
+
+      if (newStatus === 'serving' && oldStatus !== 'serving' && queue) {
+        const loket = entryData.service_window;
+        const msg = loket
+          ? `Nomor antrian ${entryData.ticket_number}, silakan menuju loket ${loket}.`
+          : `Nomor antrian ${entryData.ticket_number}, silakan menuju loket.`;
+        speak(msg);
+      }
+
+      prevStatusRef.current = newStatus;
+      setEntry(entryData);
+      if (newStatus === 'waiting') await updatePositionAhead(entryData);
+    };
+
+    const interval = setInterval(poll, 3000);
     return () => clearInterval(interval);
-  }, [entry, updatePositionAhead]);
-
-  // Realtime subscription
-  useEffect(() => {
-    const channel = supabase
-      .channel(`status-card-${entryId}`)
-      .on('postgres_changes', {
-        event: 'UPDATE', schema: 'public', table: 'queue_entries', filter: `id=eq.${entryId}`,
-      }, async (payload) => {
-        const updated = payload.new as unknown as QueueEntry;
-        const newStatus = updated.status as QueueStatus;
-        const oldStatus = prevStatusRef.current;
-
-        if (newStatus === 'serving' && oldStatus !== 'serving' && queue) {
-          const loket = updated.service_window;
-          const msg = loket
-            ? `Nomor antrian ${updated.ticket_number}, silakan menuju loket ${loket}.`
-            : `Nomor antrian ${updated.ticket_number}, silakan menuju loket.`;
-          speak(msg);
-        }
-
-        prevStatusRef.current = newStatus;
-        setEntry(updated);
-        if (newStatus === 'waiting') await updatePositionAhead(updated);
-      })
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
   }, [entryId, supabase, queue, updatePositionAhead]);
 
   if (loading) {
