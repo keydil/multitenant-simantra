@@ -8,9 +8,10 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Edit2, Trash2, Clock } from 'lucide-react';
+import { Plus, Edit2, Trash2, Clock, Loader2 } from 'lucide-react';
 import { useTenants } from '@/hooks/use-tenant-data';
 import { useQueues } from '@/hooks/use-queue-data';
+import { queueQueries } from '@/lib/supabase/queries';
 import { toast } from 'sonner';
 
 export default function QueueManagementPage() {
@@ -19,6 +20,7 @@ export default function QueueManagementPage() {
   const { queues, loading: queuesLoading } = useQueues(selectedTenantId);
   const [isOpen, setIsOpen] = useState(false);
   const [editingQueue, setEditingQueue] = useState<any>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     display_name: '',
@@ -52,17 +54,45 @@ export default function QueueManagementPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSaving(true);
     try {
-      toast.success(editingQueue ? 'Antrian berhasil diperbarui' : 'Antrian berhasil dibuat');
+      if (editingQueue) {
+        const { error } = await queueQueries.update(editingQueue.id, formData);
+        if (error) throw error;
+        toast.success('Antrian berhasil diperbarui');
+      } else {
+        const { error } = await queueQueries.create({
+          ...formData,
+          tenant_id: selectedTenantId,
+          is_active: true,
+          color_code: '#3B82F6',
+        });
+        if (error) throw error;
+        toast.success('Antrian berhasil dibuat');
+      }
       setIsOpen(false);
-    } catch (error) {
-      toast.error('Gagal menyimpan antrian');
+      // Trigger refetch by re-setting tenant
+      const prev = selectedTenantId;
+      setSelectedTenantId('');
+      setTimeout(() => setSelectedTenantId(prev), 50);
+    } catch (error: any) {
+      toast.error(`Gagal menyimpan: ${error.message || 'Unknown error'}`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const handleDelete = (queueId: string) => {
-    if (confirm('Yakin mau hapus antrian ini?')) {
+  const handleDelete = async (queueId: string) => {
+    if (!confirm('Yakin mau hapus antrian ini?')) return;
+    try {
+      const { error } = await queueQueries.update(queueId, { is_active: false });
+      if (error) throw error;
       toast.success('Antrian berhasil dihapus');
+      const prev = selectedTenantId;
+      setSelectedTenantId('');
+      setTimeout(() => setSelectedTenantId(prev), 50);
+    } catch (error: any) {
+      toast.error(`Gagal menghapus: ${error.message}`);
     }
   };
 
@@ -168,8 +198,8 @@ export default function QueueManagementPage() {
                   <Button type="button" variant="outline" onClick={() => setIsOpen(false)} className="text-sm border-slate-200">
                     Batal
                   </Button>
-                  <Button type="submit" className="text-sm bg-slate-900 hover:bg-slate-800 text-white">
-                    {editingQueue ? 'Simpan Perubahan' : 'Buat Antrian'}
+                  <Button type="submit" disabled={isSaving} className="text-sm bg-slate-900 hover:bg-slate-800 text-white">
+                    {isSaving ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Menyimpan...</> : editingQueue ? 'Simpan Perubahan' : 'Buat Antrian'}
                   </Button>
                 </div>
               </form>

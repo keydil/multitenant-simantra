@@ -1,459 +1,230 @@
-# Superadmin Dashboard - Multi-Tenant Queue Management System
+# 🎫 SIMANTRA — Sistem Manajemen Antrian Multi-Tenant & SaaS
 
-Professional enterprise-grade dashboard untuk manajemen antrian multi-tenant dengan real-time monitoring, white-labeling customization, dan complete RBAC system.
+Sistem Manajemen Antrian (**SIMANTRA**) adalah platform SaaS (*Software as a Service*) tingkat perusahaan (*enterprise-grade*) yang dirancang khusus untuk instansi pemerintahan dan swasta di Indonesia. Platform ini memungkinkan manajemen antrian multi-tenant secara terisolasi dengan fitur *real-time monitoring*, penyesuaian identitas merek (*white-labeling*), pemanggilan suara otomatis (*Text-to-Speech*), integrasi buku tamu dengan kamera, serta pelaporan Excel yang profesional.
 
-## 🎯 Quick Start
+> **Catatan Teknis**: Proyek ini dibangun menggunakan Supabase sebagai *BaaS* untuk keperluan akademik (Tugas Akhir). Arsitektur dirancang modular sehingga migrasi ke backend **NestJS** mandiri di masa depan cukup mengubah fungsi di dalam folder `hooks/` dan `lib/supabase/` — tanpa perlu menulis ulang komponen UI.
+
+---
+
+## 🏗️ Gambaran Umum Arsitektur
+
+SIMANTRA dirancang dengan prinsip pemisahan data yang ketat (*row-level isolation*) dan arsitektur *hybrid real-time* untuk memastikan performa yang cepat dan toleransi kegagalan (*fault tolerance*) yang tinggi.
+
+```
+                  ┌──────────────────────────────────────────────┐
+                  │            SUARA PANGGILAN (TTS)             │
+                  └──────────────────────┬───────────────────────┘
+                                         │
+┌────────────────────────┐    ┌──────────▼─────────────┐    ┌────────────────────────┐
+│  🖥️ KIOSK PENGUNJUNG   │    │  📺 TV DISPLAY BOARD   │    │ 📱 REAL-TIME STATUS    │
+│  Ambil Tiket & Layanan │    │  Monitor Ruang Tunggu   │    │ (Scan QR dari HP)      │
+└──────────┬─────────────┘    └──────────▲─────────────┘    └──────────▲─────────────┘
+           │                             │                             │
+           │ (Insert Entry)              │ (WebSocket Sync)            │ (WebSocket Sync)
+           │                             │                             │
+           └─────────────────────► 🗄️ SUPABASE ◄───────────────────────┘
+                                 PostgreSQL + RLS
+                                         ▲
+                                         │ (CRUD / Call Next)
+                                         │
+                              ┌──────────┴─────────────┐
+                              │  💼 OPERATOR PANEL     │
+                              │  Pemanggilan Antrian   │
+                              └────────────────────────┘
+```
+
+---
+
+## 📊 Fitur Utama & Keunggulan
+
+### 1. 🎨 Dynamic White-Labeling (Per-Tenant)
+Setiap instansi (tenant) memiliki tema visualnya sendiri. Sistem membaca kode warna primer, sekunder, aksen, logo, serta favicon langsung dari database `tenant_themes` dan mengaplikasikannya secara dinamis ke halaman kiosk, tiket, display TV, dan operator tanpa memerlukan kompilasi ulang kode.
+
+### 2. ⚡ Real-Time WebSocket & Polling Fallback
+Menggunakan koneksi WebSocket dari **Supabase Realtime** untuk sinkronisasi instan antara tindakan operator (misal: tombol "Panggil") dengan tampilan layar tunggu TV dan handphone pengunjung. Jika koneksi WebSocket terganggu, sistem secara otomatis beralih ke *smart polling* (interval 2-3 detik) untuk menjaga kelangsungan layanan.
+
+### 3. 🗣️ Native Text-to-Speech (TTS) Bahasa Indonesia
+Sistem dilengkapi dengan mesin suara otomatis berbasis Web Speech API yang telah dioptimalkan untuk bahasa Indonesia (`id-ID`). TV Display dan halaman status pengunjung akan secara otomatis mengeja nomor tiket dan loket tujuan secara presisi (contoh: *"Nomor antrian A nol nol empat, silakan menuju loket pendaftaran"*).
+
+### 4. 📸 Buku Tamu Digital & Ekspor Excel Profesional
+Fitur buku tamu publik yang dilengkapi dengan modul tangkapan kamera langsung (*live snapshot*), pencarian otomatis instansi (*autocomplete*), serta panel administrator yang mampu mengekspor daftar tamu ke dalam format Excel (`.xlsx`) lengkap dengan kustomisasi layout tabel yang rapi menggunakan pustaka `xlsx-js-style`.
+
+### 5. 🔐 Keamanan Berlapis (Multi-Layer Security)
+- **Postgres RLS** — Kebijakan keamanan di level database memastikan admin/operator hanya bisa akses data tenant mereka sendiri, bukan tenant lain.
+- **Auth Guard Berlapis** — Middleware server-side + layout client-side + role validation di `signIn`. Superadmin tidak bisa login via portal tenant dan sebaliknya.
+- **Soft Delete** — Data tidak pernah benar-benar dihapus (`is_active = false`), mencegah kehilangan data permanen.
+- **Redirect Cerdas** — Logout dari portal tenant Dinkes mengarah ke `/dinkes/login`, bukan ke portal superadmin.
+
+---
+
+## 📂 Peta Struktur Folder & Halaman
+
+Struktur proyek memanfaatkan keunggulan Next.js App Router untuk merutekan halaman publik dan terproteksi secara elegan:
 
 ```bash
-# Install dependencies
-pnpm install
-
-# Run development server
-pnpm dev
-
-# Build for production
-pnpm build
-```
-
-Open [http://localhost:3000](http://localhost:3000) - automatically redirects to `/dashboard`
-
----
-
-## 🏗️ Architecture Overview
-
-```
-┌─────────────────────────────────────────────────────────┐
-│              SUPERADMIN DASHBOARD                       │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│  Frontend (Next.js 16 + React 19)                      │
-│  ├─ 8 Dashboard Pages                                  │
-│  ├─ 9 Custom React Hooks                               │
-│  └─ Real-time Components (Kiosk, TV Display)           │
-│                                                         │
-│  ↓ Data Layer                                           │
-│                                                         │
-│  Supabase Integration                                  │
-│  ├─ Realtime Subscriptions                             │
-│  ├─ Polling Fallback (2-3s)                            │
-│  └─ Auto Retry on Error                                │
-│                                                         │
-│  ↓ Database                                             │
-│                                                         │
-│  PostgreSQL (Supabase)                                 │
-│  ├─ 8 Tables with RLS                                  │
-│  ├─ Multi-tenant Isolation                             │
-│  ├─ 9 Performance Indexes                              │
-│  └─ 2 Convenience Views                                │
-│                                                         │
-└─────────────────────────────────────────────────────────┘
-```
-
----
-
-## 📊 Features
-
-### Dashboard Pages (8)
-
-| Page | Purpose | Features |
-|------|---------|----------|
-| **Overview** | System health & KPIs | KPI cards, activity timeline, performance metrics |
-| **Live Queue Monitor** | Real-time queue display | Split-screen Kiosk + TV display, live updates |
-| **Queue Management** | Queue administration | CRUD operations, service time config, capacity limits |
-| **Analytics** | Performance insights | 30-day charts, trends, peak hour analysis |
-| **User Management** | Team & RBAC | Tenant users, 4 roles (superadmin/admin/operator/viewer) |
-| **Announcements** | System broadcasts | Create/edit announcements, priority levels, targeting |
-| **Tenants Management** | Multi-tenant admin | Tenant CRUD, logo upload, white-labeling colors |
-| **Settings** | System config | Database stats, notification preferences, security |
-
-### Real-time Features
-
-✅ **Live Queue Updates**
-- Kiosk Display: "NOW SERVING" + next-in-queue
-- TV Display: Full queue status with announcements
-- Update interval: 2-3 seconds with Realtime fallback
-
-✅ **White-labeling (Per-Tenant)**
-- Primary, secondary, accent colors
-- Custom text & background colors
-- Logo and favicon URL customization
-- Custom CSS injection ready
-
-✅ **RBAC (4 Roles)**
-- **Superadmin**: All tenants, all data
-- **Admin**: Own tenant full access
-- **Operator**: Own tenant queues only
-- **Viewer**: Read-only access
-
-✅ **Multi-tenant Isolation**
-- Row Level Security on all tables
-- Tenant-scoped queries
-- Data leakage prevention
-- Audit-ready architecture
-
----
-
-## 📁 Project Structure
-
-```
-superadmin-dashboard/
+simantra-multitenant/
 ├── app/
-│   ├── dashboard/
-│   │   ├── page.tsx                 # Overview
-│   │   ├── queue-monitor/           # Live Queue Monitor
-│   │   ├── queue-management/        # Queue CRUD
-│   │   ├── analytics/               # Analytics & Charts
-│   │   ├── users/                   # User Management
-│   │   ├── announcements/           # Announcements
-│   │   ├── tenants/                 # Tenants Management
-│   │   └── settings/                # Settings
-│   └── layout.tsx
-│
-├── components/
-│   ├── dashboard-sidebar.tsx        # Main navigation
-│   ├── kpi-cards.tsx                # KPI metrics
-│   ├── queue-monitor/
-│   │   ├── kiosk-display.tsx
-│   │   ├── tv-display.tsx
-│   │   └── live-queue-monitor.tsx
-│   ├── tenants-table.tsx
-│   └── add-tenant-dialog.tsx
-│
-├── hooks/
-│   ├── use-queue-data.ts            # Queue operations
-│   └── use-tenant-data.ts           # Tenant operations
-│
+│   ├── [tenant]/                       # 🏢 Dynamic Route Spesifik Per-Tenant
+│   │   ├── _components/                # Komponen modular visual tenant (kiosk-home)
+│   │   ├── admin/                      # Dashboard admin lokal instansi
+│   │   │   ├── counters/               # ✅ CRUD kelola loket & jenis layanan
+│   │   │   ├── guest-book/             # ✅ Rekapan tamu + filter + Ekspor Excel
+│   │   │   ├── operators/              # ✅ CRUD kelola petugas operator & admin
+│   │   │   └── settings/               # ✅ Profil instansi & theme white-labeling
+│   │   ├── display/                    # Halaman TV monitor ruang tunggu (TTS aktif)
+│   │   ├── guest-book/                 # Halaman pengisian buku tamu (kamera aktif)
+│   │   ├── login/                      # Portal login petugas per-instansi
+│   │   ├── operator/                   # Panel panggil/hold/complete untuk petugas loket
+│   │   ├── queue/                      # Alur alokasi antrian
+│   │   │   ├── status/[id]/            # Pantau antrian dari HP pengunjung (real-time)
+│   │   │   └── ticket/[id]/            # Tampilan tiket antrian + QR Code dinamis
+│   │   └── page.tsx                    # Kiosk utama instansi
+│   ├── auth/                           # Halaman login superadmin SaaS
+│   ├── dashboard/                      # 🌐 Global Superadmin Dashboard (SaaS Owner)
+│   │   ├── analytics/                  # Grafik analitik seluruh tenant (Recharts)
+│   │   ├── announcements/              # ✅ CRUD broadcast pengumuman ke tenant
+│   │   ├── queue-management/           # ✅ CRUD kategori antrian global
+│   │   ├── queue-monitor/              # Monitoring antrian live seluruh tenant
+│   │   ├── settings/                   # Konfigurasi sistem
+│   │   ├── tenants/                    # ✅ CRUD pendaftaran & kustomisasi tenant
+│   │   └── users/                      # ✅ CRUD manajemen user RBAC multitenant
+│   ├── globals.css                     # Konfigurasi Tailwind CSS v4
+│   ├── layout.tsx                      # Root layout + AuthProvider
+│   └── page.tsx                        # Root redirector
+├── components/                         # Komponen UI global (Shadcn/UI & Lucide)
+│   ├── dashboard-sidebar.tsx           # Sidebar navigasi superadmin
+│   ├── kpi-cards.tsx                   # ✅ KPI cards dashboard (data real dari DB)
+│   └── ui/                             # Shadcn/UI primitives
+├── hooks/                              # React Hooks Kustom — abstraksi data layer
+│   ├── use-guest-book.ts               # Buku tamu insert & fetch autocomplete
+│   ├── use-queue-data.ts               # Sinkronisasi real-time antrian
+│   ├── use-queue-entries.ts            # Fetch & subscribe queue entries
+│   ├── use-tenant.ts                   # Fetcher identitas & tema instansi
+│   ├── use-tenant-data.ts              # Hook koleksi (useTenants, useAnnouncements, dll)
+│   └── use-toast.ts                    # Notifikasi pop-up
 ├── lib/
-│   ├── supabase/
-│   │   ├── client.ts                # Supabase client
-│   │   ├── queries.ts               # Database queries
-│   │   └── types.ts                 # TypeScript types
-│   └── utils.ts
-│
-├── scripts/
-│   ├── 01-init-schema.sql           # Database schema
-│   └── 02-seed-data.sql             # Seed data
-│
-└── [documentation]
-    ├── SUPABASE_SETUP_COMPLETE.md   # Setup guide
-    ├── IMPLEMENTATION_CHECKLIST.md  # Feature checklist
-    └── BUILD_SUMMARY.md             # Technical overview
+│   ├── auth/
+│   │   └── auth-context.tsx            # ✅ AuthProvider — signIn/signOut + signingOut state
+│   └── supabase/
+│       ├── client.ts                   # Supabase browser client (singleton)
+│       ├── queries.ts                  # ✅ Semua fungsi CRUD terstruktur per tabel
+│       ├── server.ts                   # Supabase SSR server-side client
+│       └── types.ts                    # TypeScript database schema types
+├── middleware.ts                       # ✅ Route guard + redirect cerdas per-role
+└── scripts/                            # Migrasi SQL & Seed Data awal
+    ├── 01-init-schema.sql              # Tabel, indeks, view, RLS policies
+    ├── 02-seed-data.sql                # Data sampel instansi, operator, antrian
+    └── run-migrations.mjs              # Skrip eksekusi migrasi database otomatis
 ```
 
 ---
 
-## 🗄️ Database Schema
+## 🛠️ Stack Teknologi
 
-### Tenants (5 Seeded)
-```typescript
-{
-  id: UUID,
-  name: string,                    // Dinas Kesehatan
-  subdomain: string,               // dinkes
-  logo_url: string,
-  brand_color: string,             // #10B981
-  subscription_tier: enum,         // free | standard | premium
-  is_active: boolean,
-  created_at: timestamp
-}
-```
-
-### Tenant Users (9 Seeded)
-```typescript
-{
-  id: UUID,
-  tenant_id: UUID,
-  auth_user_id: UUID,
-  email: string,
-  role: enum,                      // superadmin | admin | operator | viewer
-  is_active: boolean,
-  last_login: timestamp
-}
-```
-
-### Queues (9 Seeded)
-```typescript
-{
-  id: UUID,
-  tenant_id: UUID,
-  name: string,                    // Pendaftaran Pasien
-  service_code: string,            // A, B, C...
-  color_code: string,              // #3B82F6
-  max_capacity: number,
-  estimated_service_time_minutes: number,
-  is_active: boolean
-}
-```
-
-### Queue Entries
-```typescript
-{
-  id: UUID,
-  queue_id: UUID,
-  tenant_id: UUID,
-  ticket_number: string,
-  customer_name: string,
-  status: enum,                    // waiting | serving | completed | no_show | cancelled
-  entered_at: timestamp,
-  started_at: timestamp,
-  completed_at: timestamp
-}
-```
-
-### Announcements (3 Seeded)
-```typescript
-{
-  id: UUID,
-  title: string,
-  description: text,
-  announcement_type: enum,        // update | warning | maintenance | info
-  target_tenants: enum,           // all | specific
-  specific_tenant_ids: UUID[],
-  is_active: boolean,
-  priority: number,
-  published_at: timestamp,
-  expires_at: timestamp
-}
-```
-
-### Analytics Daily
-```typescript
-{
-  id: UUID,
-  tenant_id: UUID,
-  queue_id: UUID,
-  date: date,
-  total_entries: number,
-  completed_entries: number,
-  average_service_time_minutes: decimal,
-  peak_hour: number,
-  peak_count: number
-}
-```
-
-### Tenant Themes (5 Seeded - Per Tenant)
-```typescript
-{
-  id: UUID,
-  tenant_id: UUID,
-  primary_color: string,          // #3B82F6
-  secondary_color: string,        // #1E40AF
-  accent_color: string,           // #10B981
-  text_color: string,             // #1F2937
-  background_color: string,       // #FFFFFF
-  logo_url: string,
-  is_custom_theme: boolean
-}
-```
+*   **Frontend**: Next.js 16 (App Router, Turbopack), React 19, TypeScript
+*   **Styling & Animasi**: Tailwind CSS v4, Framer Motion (transisi kiosk), Lucide React
+*   **Visualisasi Data**: Recharts (analitik performa loket)
+*   **Integrasi Backend**: Supabase (PostgreSQL, Realtime WebSockets, SSR Auth)
+*   **Pustaka Pendukung**:
+    *   `qrcode.react` (pembuat QR Code tiket antrian)
+    *   `xlsx-js-style` (generator laporan excel dengan desain kustom)
+    *   `react-hook-form` + `zod` (validasi form buku tamu & admin)
+    *   `sonner` (sistem notifikasi toast)
 
 ---
 
-## 🔐 Security Features
+## ✅ Status Implementasi
 
-### Multi-tenant Isolation
-- Row Level Security (RLS) on all tables
-- Tenant_id foreign key enforcement
-- Scoped queries per user tenant
-- Superadmin override capability
-
-### Data Protection
-- Check constraints on enums
-- NOT NULL on required fields
-- UNIQUE constraints on subdomain
-- Soft deletes (is_active flag)
-
-### Access Control
-- Role-based access (RBAC)
-- Policy-based database rules
-- Auth user to tenant mapping
-- Audit-ready schema
+| Area | Halaman | Status |
+| :--- | :--- | :---: |
+| **Pengunjung (Publik)** | Kiosk, Tiket, Status Real-time, TV Display, Buku Tamu | ✅ Selesai |
+| **Operator** | Panel Panggil / Hold / Complete / No-Show | ✅ Selesai |
+| **Admin Tenant** | Dashboard, Buku Tamu, Kelola Loket, Kelola Operator, Pengaturan | ✅ Selesai |
+| **Superadmin** | Overview, Analytics, Queue Monitor, Announcements, Queue Mgmt, Users, Tenants | ✅ Selesai |
+| **Autentikasi** | Login Superadmin, Login Tenant, Logout, Session Guard, Redirect per-role | ✅ Selesai |
+| **Superadmin Settings** | Toggle 2FA, Backup DB, dll | 🔲 Roadmap (NestJS) |
 
 ---
 
-## 🚀 Deployment
+## 🚀 Panduan Instalasi & Pengoperasian
 
-### To Vercel
+### 1. Prasyarat Awal
+Pastikan Anda sudah memiliki akun **Supabase** dan proyek PostgreSQL yang aktif.
 
-```bash
-# Push to GitHub
-git add .
-git commit -m "Superadmin dashboard"
-git push origin main
+### 2. Konfigurasi Database
+Buka **SQL Editor** pada dashboard Supabase Anda, salin dan jalankan skrip berikut sesuai urutan:
+1.  Isi skrip dari `scripts/01-init-schema.sql` untuk menginisialisasi tabel, views, index, dan RLS.
+2.  Isi skrip dari `scripts/02-seed-data.sql` untuk mengisi data simulasi instansi.
 
-# Create Vercel project pointing to repo
-# Vercel automatically detects Next.js
-# Env vars auto-synced from Supabase integration
-```
-
-### Environment Variables Required
-
+### 3. Konfigurasi Environment Variables
+Buat file `.env` di direktori utama proyek Anda dan konfigurasikan kunci akses Supabase Anda:
 ```env
-# Auto-populated by Supabase integration
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-POSTGRES_URL=
-SUPABASE_SERVICE_ROLE_KEY=
-SUPABASE_JWT_SECRET=
+NEXT_PUBLIC_SUPABASE_URL=https://<id-proyek-anda>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<kunci-anon-anda>
+SUPABASE_SERVICE_ROLE_KEY=<kunci-service-role-anda>
 ```
 
-### Database Backup
+### 4. Instalasi Dependensi & Menjalankan Aplikasi
+Buka terminal dan jalankan perintah berikut:
+```bash
+# Instal seluruh pustaka pendukung
+npm install
 
-Supabase provides automatic daily backups. Enable point-in-time recovery in dashboard.
+# Jalankan server pengembangan lokal (Next.js Turbopack)
+# Catatan Windows: Jika eksekusi skrip diblokir di PowerShell, jalankan via CMD
+cmd /c "npm run dev"
+```
+
+Aplikasi kini dapat diakses melalui browser di alamat [http://localhost:3000](http://localhost:3000) dan akan secara otomatis diarahkan ke portal yang sesuai berdasarkan session login Anda.
 
 ---
 
-## 🔄 Real-time Architecture
+## 🧪 Data Akun Simulasi untuk QA & Pengujian
 
-### Polling Fallback (Primary)
-```typescript
-// 2-3 second intervals
-const interval = setInterval(fetchData, 2000);
+Tabel berikut menyajikan data sampel yang sudah tersimpan di database untuk mempermudah pengujian alur kerja (*end-to-end workflow*):
 
-// Auto-cleanup on unmount
-return () => clearInterval(interval);
+### A. Daftar Instansi (Tenant) & URL Kiosk Publik
+| Instansi | Slug URL Kiosk | Tema Warna Utama | Deskripsi |
+| :--- | :--- | :--- | :--- |
+| **Dinas Kesehatan** | `/dinkes` | Hijau (`#10B981`) | Dinas Kesehatan Kota |
+| **Kantor Desa** | `/kantor-desa` | Biru Muda (`#0EA5E9`) | Kantor Desa Sukamaju |
+| **Puskesmas** | `/puskesmas` | Ungu (`#8B5CF6`) | Puskesmas Merdeka |
+| **BPJS Kesehatan** | `/bpjs` | Oranye (`#F97316`) | BPJS Regional |
+| **Kantor Kelurahan**| `/kelurahan` | Pink (`#EC4899`) | Kantor Kelurahan Jaya |
+
+### B. Kredensial Pengguna Berdasarkan Peran (Role RBAC)
+Petugas dapat masuk melalui portal login masing-masing instansi (misal: `/[tenant]/login`) atau login pusat superadmin.
+
+> ⚠️ **Penting**: Superadmin hanya bisa login melalui `/auth/login`. Admin & Operator hanya bisa login melalui portal instansi (`/[tenant]/login`). Login silang akan ditolak secara eksplisit.
+
+| Email Akun | Peran (Role) | Ruang Lingkup Hak Akses | Halaman Tujuan Redirect |
+| :--- | :--- | :--- | :--- |
+| **admin@queuemaster.local** | `superadmin` | Akses seluruh data & konfigurasi sistem | `/dashboard` |
+| **admin@dinkes.local** | `admin` | Pengelola penuh instansi **Dinas Kesehatan** | `/dinkes/admin` |
+| **operator1@dinkes.local** | `operator` | Petugas loket **Dinas Kesehatan** | `/dinkes/operator` |
+| **admin@desasukamaju.local**| `admin` | Pengelola penuh instansi **Kantor Desa** | `/kantor-desa/admin` |
+
+### C. Alur Pengujian Lengkap (End-to-End)
 ```
-
-### Supabase Realtime (Secondary)
-```typescript
-// Direct WebSocket subscription
-supabase
-  .channel(`queue:${queueId}`)
-  .on('postgres_changes', 
-    { event: '*', table: 'queue_entries' },
-    (payload) => setData(payload.new)
-  )
-  .subscribe();
-```
-
-### Hybrid Approach Benefits
-- Works even if Realtime disconnects
-- Consistent 2-3s update guarantee
-- WebSocket upgrade when available
-- Automatic failover handling
-
----
-
-## 🧪 Testing Data
-
-### 5 Test Tenants Available
-
-```
-1. Dinas Kesehatan (dinkes)
-   - UUID: 550e8400-e29b-41d4-a716-446655440001
-   - 3 queues, premium tier
-
-2. Kantor Desa (kantor-desa)
-   - UUID: 550e8400-e29b-41d4-a716-446655440002
-   - 2 queues, standard tier
-
-3. Puskesmas (puskesmas)
-   - UUID: 550e8400-e29b-41d4-a716-446655440003
-   - 2 queues, standard tier
-
-4. BPJS Kesehatan (bpjs)
-   - UUID: 550e8400-e29b-41d4-a716-446655440004
-   - 1 queue, premium tier
-
-5. Kantor Kelurahan (kelurahan)
-   - UUID: 550e8400-e29b-41d4-a716-446655440005
-   - 1 queue, standard tier
-```
-
-### Test Users
-
-```
-Superadmin:
-  Email: admin@queuemaster.local
-  UUID: 11111111-1111-1111-1111-111111111111
-
-Dinas Kesehatan Admin:
-  Email: admin@dinkes.local
-  UUID: 22222222-2222-2222-2222-222222222222
-
-Dinas Kesehatan Operator:
-  Email: operator1@dinkes.local
-  UUID: 33333333-3333-3333-3333-333333333333
+1. Buka /dinkes               → Kiosk publik, pilih layanan, ambil tiket
+2. Buka /dinkes/display       → TV monitor, pantau nomor yang dipanggil
+3. Buka /dinkes/login         → Login sebagai operator1@dinkes.local
+4. Buka /dinkes/operator      → Panel operator: panggil, hold, selesaikan antrian
+5. Buka /dinkes/login         → Login sebagai admin@dinkes.local
+6. Buka /dinkes/admin         → Dashboard ringkasan statistik
+7. Buka /dinkes/admin/counters   → Kelola loket layanan
+8. Buka /dinkes/admin/operators  → Kelola daftar petugas
+9. Buka /dinkes/admin/settings   → Ubah nama & warna tema instansi
+10. Buka /auth/login          → Login sebagai admin@queuemaster.local (superadmin)
+11. Buka /dashboard           → Overview statistik real dari seluruh tenant
 ```
 
 ---
 
-## 📈 Performance Metrics
+## 🔮 Roadmap Pengembangan Masa Depan
 
-- **Database Queries**: <50ms (with indexes)
-- **Page Load**: <2s on 4G
-- **Real-time Updates**: 2-3s max latency
-- **Bundle Size**: ~250KB (minified + gzipped)
-- **API Requests**: Optimized with RLS filtering
-
----
-
-## 🔮 Future Enhancements
-
-### Phase 2: Authentication
-- [ ] Supabase Auth UI integration
-- [ ] Email/password login
-- [ ] Social login (Google, Microsoft)
-- [ ] MFA support
-
-### Phase 3: Backend
-- [ ] NestJS API migration
-- [ ] GraphQL API option
-- [ ] Webhook integrations
-- [ ] 3rd party API support
-
-### Phase 4: Advanced Features
-- [ ] Machine learning predictions
-- [ ] Mobile app (React Native)
-- [ ] Offline support
-- [ ] PDF reports
-
----
-
-## 📚 Documentation
-
-- `SUPABASE_SETUP_COMPLETE.md` - Database setup guide
-- `IMPLEMENTATION_CHECKLIST.md` - Feature checklist
-- `BUILD_SUMMARY.md` - Technical architecture
-- `SETUP_GUIDE.md` - Deployment instructions
-
----
-
-## 🛠️ Tech Stack
-
-- **Frontend**: Next.js 16, React 19, TypeScript
-- **Styling**: Tailwind CSS v4, Shadcn/UI
-- **Icons**: Lucide React
-- **Charts**: Recharts
-- **Database**: Supabase (PostgreSQL)
-- **Real-time**: Supabase Realtime
-- **Forms**: React Hook Form, Zod validation
-- **Notifications**: Sonner toast
-
----
-
-## 📦 Build Status
-
-```
-✅ TypeScript:      0 errors
-✅ ESLint:          Clean
-✅ Dependencies:    All installed
-✅ Database:        Schema applied
-✅ Seed Data:       Inserted
-✅ Real-time:       Connected
-✅ Ready to Deploy: YES
-```
-
----
-
-## 📞 Support
-
-For issues or questions:
-1. Check `SUPABASE_SETUP_COMPLETE.md` for setup help
-2. Review `IMPLEMENTATION_CHECKLIST.md` for feature status
-3. See `BUILD_SUMMARY.md` for technical details
-
----
-
-**Status**: 🟢 Production Ready  
-**Last Updated**: April 2024  
-**License**: MIT
+*   **Migrasi Backend ke NestJS**: Ganti Supabase client di `hooks/` dan `lib/supabase/queries.ts` dengan HTTP request ke REST API NestJS — tanpa perlu ubah komponen UI.
+*   **Notifikasi WhatsApp (Omnichannel)**: Pengiriman tiket digital dan notifikasi giliran via WhatsApp Bot atau SMS gateway.
+*   **Pendaftaran Mandiri & Paket Langganan**: Integrasi gateway pembayaran Stripe untuk penagihan langganan otomatis (*SaaS monetization*).
+*   **Aplikasi Mobile (PWA / React Native)**: Memudahkan pengunjung memantau antrian secara portabel.
+*   **Sistem Tiket Kios Fisik**: Integrasi mesin pencetak thermal lokal via protokol ESC/POS dari browser.

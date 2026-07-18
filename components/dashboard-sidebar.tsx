@@ -108,16 +108,14 @@ export function DashboardSidebar() {
         ))}
       </nav>
 
-      {/* User Footer */}
-      <div className="px-3 py-3 border-t border-slate-200">
-        {/* Status */}
-        <div className="flex items-center gap-2 px-3 py-1.5 mb-1">
+      {/* User info + Logout */}
+      <div className="px-3 py-3 border-t border-slate-200 space-y-1">
+        <div className="flex items-center gap-2 px-3 py-1.5">
           <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
           <span className="text-[11px] text-slate-400">Semua sistem normal</span>
         </div>
 
-        {/* User info */}
-        <div className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-slate-100 transition-colors group cursor-pointer">
+        <div className="flex items-center gap-3 px-3 py-2 rounded-md">
           <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-white text-[10px] font-bold"
             style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%)' }}>
             {initials}
@@ -128,14 +126,15 @@ export function DashboardSidebar() {
             </p>
             <p className="text-[10px] text-slate-400 truncate">{user?.email}</p>
           </div>
-          <button
-            onClick={() => signOut()}
-            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-slate-200"
-            title="Keluar"
-          >
-            <LogOut className="w-3.5 h-3.5 text-slate-400" />
-          </button>
         </div>
+
+        <button
+          onClick={() => signOut()}
+          className="flex items-center gap-2.5 w-full px-3 py-2 rounded-md text-[12px] font-medium text-red-500 hover:bg-red-50 transition-colors"
+        >
+          <LogOut className="w-3.5 h-3.5" />
+          Keluar
+        </button>
       </div>
     </div>
   );

@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -14,48 +13,32 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { Plus, Edit2, Trash2, AlertTriangle, AlertCircle, Zap, Info } from 'lucide-react';
+import { Plus, Edit2, Trash2, AlertTriangle, AlertCircle, Zap, Info, Loader2 } from 'lucide-react';
 import { useTenants, useAnnouncements } from '@/hooks/use-tenant-data';
+import { announcementQueries } from '@/lib/supabase/queries';
+import { useAuth } from '@/lib/auth/auth-context';
 import { toast } from 'sonner';
 
 export default function AnnouncementsPage() {
   const { tenants, loading: tenantsLoading } = useTenants();
+  const { announcements, loading: announcementsLoading, setAnnouncements } = useAnnouncements();
+  const { user } = useAuth();
   const [selectedTenantIds, setSelectedTenantIds] = useState<string[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [editingAnnouncement, setEditingAnnouncement] = useState<any>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     type: 'update',
     target: 'all',
     priority: 0,
+    expires_days: 30,
   });
-  const [announcements, setAnnouncements] = useState<any[]>([
-    {
-      id: '1',
-      title: 'Maintenance Terjadwal Akhir Pekan',
-      description: 'Sistem akan mengalami maintenance pada Sabtu 22:00 - Minggu 06:00.',
-      type: 'maintenance',
-      target: 'all',
-      priority: 1,
-      created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-      expires_at: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      id: '2',
-      title: 'Update Sistem v2.1.0 Live',
-      description: 'Versi terbaru sudah live dengan fitur Live Analytics dan Multi-language Support.',
-      type: 'update',
-      target: 'all',
-      priority: 0,
-      created_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-  ]);
 
   useEffect(() => {
     if (tenants.length > 0 && selectedTenantIds.length === 0) {
-      setSelectedTenantIds([tenants[0].id]);
+      setSelectedTenantIds(tenants.map((t) => t.id));
     }
   }, [tenants, selectedTenantIds]);
 
@@ -65,35 +48,82 @@ export default function AnnouncementsPage() {
       setFormData({
         title: announcement.title,
         description: announcement.description,
-        type: announcement.type,
-        target: announcement.target,
+        type: announcement.announcement_type,
+        target: announcement.target_tenants,
         priority: announcement.priority,
+        expires_days: 30,
       });
+      if (announcement.specific_tenant_ids?.length) {
+        setSelectedTenantIds(announcement.specific_tenant_ids);
+      }
     } else {
       setEditingAnnouncement(null);
-      setFormData({ title: '', description: '', type: 'update', target: 'all', priority: 0 });
+      setFormData({ title: '', description: '', type: 'update', target: 'all', priority: 0, expires_days: 30 });
+      setSelectedTenantIds(tenants.map((t) => t.id));
     }
     setIsOpen(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSaving(true);
+
     try {
+      const isAllTenants = selectedTenantIds.length === tenants.length;
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + formData.expires_days);
+
       if (editingAnnouncement) {
+        // UPDATE
+        const { data, error } = await announcementQueries.update(editingAnnouncement.id, {
+          title: formData.title,
+          description: formData.description,
+          announcement_type: formData.type,
+          target_tenants: isAllTenants ? 'all' : 'specific',
+          specific_tenant_ids: isAllTenants ? null : selectedTenantIds,
+          priority: formData.priority,
+          expires_at: expiresAt.toISOString(),
+        });
+        if (error) throw error;
+        setAnnouncements((prev: any[]) =>
+          prev.map((a) => (a.id === editingAnnouncement.id ? { ...a, ...data } : a))
+        );
         toast.success('Pengumuman berhasil diperbarui');
       } else {
+        // INSERT
+        const { data, error } = await announcementQueries.create({
+          title: formData.title,
+          description: formData.description,
+          announcement_type: formData.type,
+          target_tenants: isAllTenants ? 'all' : 'specific',
+          specific_tenant_ids: isAllTenants ? null : selectedTenantIds,
+          priority: formData.priority,
+          is_active: true,
+          expires_at: expiresAt.toISOString(),
+          created_by: user?.id || 'system',
+        });
+        if (error) throw error;
+        if (data) setAnnouncements((prev: any[]) => [data, ...prev]);
         toast.success('Pengumuman berhasil disebar ke semua tenant');
       }
       setIsOpen(false);
-    } catch (error) {
-      toast.error('Gagal menyimpan pengumuman');
+    } catch (error: any) {
+      console.error('[announcements] Save error:', error);
+      toast.error(`Gagal menyimpan: ${error.message || 'Unknown error'}`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Yakin mau hapus pengumuman ini?')) {
-      setAnnouncements(announcements.filter((a) => a.id !== id));
+  const handleDelete = async (id: string) => {
+    if (!confirm('Yakin mau hapus pengumuman ini?')) return;
+    try {
+      const { error } = await announcementQueries.update(id, { is_active: false });
+      if (error) throw error;
+      setAnnouncements((prev: any[]) => prev.filter((a) => a.id !== id));
       toast.success('Pengumuman dihapus');
+    } catch (error: any) {
+      toast.error(`Gagal menghapus: ${error.message}`);
     }
   };
 
@@ -123,8 +153,12 @@ export default function AnnouncementsPage() {
     return <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${cls}`}>{label}</span>;
   };
 
-  if (tenantsLoading) {
-    return <div className="flex items-center justify-center h-64"><p className="text-sm text-slate-400">Memuat...</p></div>;
+  if (tenantsLoading || announcementsLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+      </div>
+    );
   }
 
   return (
@@ -180,7 +214,7 @@ export default function AnnouncementsPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="type" className="text-sm font-medium text-slate-700">Tipe</Label>
                   <select
@@ -207,6 +241,21 @@ export default function AnnouncementsPage() {
                     <option value={0}>Rendah</option>
                     <option value={1}>Sedang</option>
                     <option value={2}>Tinggi</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="expires" className="text-sm font-medium text-slate-700">Kedaluwarsa</Label>
+                  <select
+                    id="expires"
+                    value={formData.expires_days}
+                    onChange={(e) => setFormData({ ...formData, expires_days: parseInt(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  >
+                    <option value={7}>7 hari</option>
+                    <option value={14}>14 hari</option>
+                    <option value={30}>30 hari</option>
+                    <option value={90}>90 hari</option>
                   </select>
                 </div>
               </div>
@@ -249,8 +298,10 @@ export default function AnnouncementsPage() {
                 <Button type="button" variant="outline" onClick={() => setIsOpen(false)} className="text-sm border-slate-200">
                   Batal
                 </Button>
-                <Button type="submit" className="text-sm bg-slate-900 hover:bg-slate-800 text-white">
-                  {editingAnnouncement ? 'Simpan Perubahan' : 'Sebar Pengumuman'}
+                <Button type="submit" disabled={isSaving} className="text-sm bg-slate-900 hover:bg-slate-800 text-white">
+                  {isSaving ? (
+                    <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Menyimpan...</>
+                  ) : editingAnnouncement ? 'Simpan Perubahan' : 'Sebar Pengumuman'}
                 </Button>
               </div>
             </form>
@@ -279,12 +330,12 @@ export default function AnnouncementsPage() {
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex items-start gap-3 flex-1 min-w-0">
                       <div className="mt-0.5 p-1.5 rounded-lg bg-slate-100 flex-shrink-0">
-                        {getAnnouncementIcon(announcement.type)}
+                        {getAnnouncementIcon(announcement.announcement_type)}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
                           <h3 className="font-semibold text-sm text-slate-900">{announcement.title}</h3>
-                          {getTypeBadge(announcement.type)}
+                          {getTypeBadge(announcement.announcement_type)}
                           {announcement.priority > 0 && (
                             <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200">
                               Prioritas {announcement.priority}
@@ -293,7 +344,7 @@ export default function AnnouncementsPage() {
                         </div>
                         <p className="text-sm text-slate-500 mb-2 leading-relaxed">{announcement.description}</p>
                         <p className="text-xs text-slate-400">
-                          Dibuat: {new Date(announcement.created_at).toLocaleDateString('id-ID')} &bull; Kedaluwarsa: {new Date(announcement.expires_at).toLocaleDateString('id-ID')}
+                          Dibuat: {new Date(announcement.created_at).toLocaleDateString('id-ID')} &bull; Kedaluwarsa: {announcement.expires_at ? new Date(announcement.expires_at).toLocaleDateString('id-ID') : '—'}
                         </p>
                       </div>
                     </div>

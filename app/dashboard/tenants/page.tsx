@@ -15,9 +15,10 @@ import {
 } from '@/components/ui/dialog';
 import { TenantsTable, Tenant } from '@/components/tenants-table';
 import { AddTenantDialog, TenantFormData } from '@/components/add-tenant-dialog';
-import { Plus, Palette } from 'lucide-react';
+import { Palette } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useTenants, useTenantTheme } from '@/hooks/use-tenant-data';
+import { tenantQueries, themeQueries } from '@/lib/supabase/queries';
 
 export default function TenantsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -46,11 +47,31 @@ export default function TenantsPage() {
     }
   }, [theme]);
 
-  const handleAddTenant = (data: TenantFormData) => {
-    toast({
-      title: 'Tenant berhasil ditambahkan',
-      description: `${data.agencyName} telah ditambahkan ke sistem.`,
-    });
+  const handleAddTenant = async (data: TenantFormData) => {
+    try {
+      const slug = data.agencyName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
+      const { data: newTenant, error } = await tenantQueries.create({
+        name: data.agencyName,
+        subdomain: slug,
+        address: data.address || null,
+        brand_color: data.brandColor || '#3B82F6',
+        subscription_tier: data.subscriptionTier || 'free',
+        is_active: true,
+      });
+      if (error) throw error;
+      toast({
+        title: 'Tenant berhasil ditambahkan',
+        description: `${data.agencyName} telah ditambahkan ke sistem.`,
+      });
+      // Reload page to refresh data
+      window.location.reload();
+    } catch (err: any) {
+      toast({
+        title: 'Gagal menambah tenant',
+        description: err.message,
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleEditTenant = (tenant: Tenant) => {
@@ -58,20 +79,42 @@ export default function TenantsPage() {
     setThemeDialogOpen(true);
   };
 
-  const handleDeleteTenant = (tenant: Tenant) => {
-    toast({
-      title: 'Tenant dihapus',
-      description: `${tenant.name} telah dihapus dari sistem.`,
-      variant: 'destructive',
-    });
+  const handleDeleteTenant = async (tenant: Tenant) => {
+    if (!confirm(`Yakin mau menonaktifkan ${tenant.name}?`)) return;
+    try {
+      const { error } = await tenantQueries.delete(tenant.id);
+      if (error) throw error;
+      toast({
+        title: 'Tenant dinonaktifkan',
+        description: `${tenant.name} telah dinonaktifkan.`,
+      });
+      window.location.reload();
+    } catch (err: any) {
+      toast({
+        title: 'Gagal menghapus',
+        description: err.message,
+        variant: 'destructive',
+      });
+    }
   };
 
-  const handleSaveTheme = () => {
-    toast({
-      title: 'Theme diperbarui',
-      description: `Theme untuk ${selectedTenant?.name} berhasil disimpan.`,
-    });
-    setThemeDialogOpen(false);
+  const handleSaveTheme = async () => {
+    if (!selectedTenant) return;
+    try {
+      const { error } = await themeQueries.update(selectedTenant.id, themeFormData);
+      if (error) throw error;
+      toast({
+        title: 'Theme diperbarui',
+        description: `Theme untuk ${selectedTenant.name} berhasil disimpan.`,
+      });
+      setThemeDialogOpen(false);
+    } catch (err: any) {
+      toast({
+        title: 'Gagal menyimpan theme',
+        description: err.message,
+        variant: 'destructive',
+      });
+    }
   };
 
   return (

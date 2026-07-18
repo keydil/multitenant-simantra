@@ -7,8 +7,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Edit2, Trash2, Mail, Shield } from 'lucide-react';
+import { Plus, Edit2, Trash2, Mail, Shield, Loader2 } from 'lucide-react';
 import { useTenants, useTenantUsers } from '@/hooks/use-tenant-data';
+import { tenantUserQueries } from '@/lib/supabase/queries';
 import { toast } from 'sonner';
 
 export default function UserManagementPage() {
@@ -17,6 +18,7 @@ export default function UserManagementPage() {
   const { users, loading: usersLoading } = useTenantUsers(selectedTenantId);
   const [isOpen, setIsOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({ email: '', full_name: '', role: 'operator' });
 
   useEffect(() => {
@@ -38,17 +40,51 @@ export default function UserManagementPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSaving(true);
     try {
-      toast.success(editingUser ? 'Pengguna berhasil diperbarui' : 'Pengguna berhasil dibuat');
+      if (editingUser) {
+        const { error } = await tenantUserQueries.update(editingUser.id, {
+          email: formData.email,
+          full_name: formData.full_name,
+          role: formData.role,
+        });
+        if (error) throw error;
+        toast.success('Pengguna berhasil diperbarui');
+      } else {
+        const { error } = await tenantUserQueries.create({
+          tenant_id: selectedTenantId,
+          email: formData.email,
+          full_name: formData.full_name,
+          role: formData.role,
+          is_active: true,
+          auth_user_id: crypto.randomUUID(), // Placeholder — akan diganti oleh Supabase Auth nanti
+        });
+        if (error) throw error;
+        toast.success('Pengguna berhasil dibuat');
+      }
       setIsOpen(false);
-    } catch (error) {
-      toast.error('Gagal menyimpan pengguna');
+      // Refetch
+      const prev = selectedTenantId;
+      setSelectedTenantId('');
+      setTimeout(() => setSelectedTenantId(prev), 50);
+    } catch (error: any) {
+      toast.error(`Gagal menyimpan: ${error.message || 'Unknown error'}`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const handleDelete = (userId: string) => {
-    if (confirm('Yakin mau hapus pengguna ini?')) {
+  const handleDelete = async (userId: string) => {
+    if (!confirm('Yakin mau hapus pengguna ini?')) return;
+    try {
+      const { error } = await tenantUserQueries.update(userId, { is_active: false });
+      if (error) throw error;
       toast.success('Pengguna berhasil dihapus');
+      const prev = selectedTenantId;
+      setSelectedTenantId('');
+      setTimeout(() => setSelectedTenantId(prev), 50);
+    } catch (error: any) {
+      toast.error(`Gagal menghapus: ${error.message}`);
     }
   };
 
@@ -145,8 +181,8 @@ export default function UserManagementPage() {
                   <Button type="button" variant="outline" onClick={() => setIsOpen(false)} className="text-sm border-slate-200">
                     Batal
                   </Button>
-                  <Button type="submit" className="text-sm bg-slate-900 hover:bg-slate-800 text-white">
-                    {editingUser ? 'Simpan Perubahan' : 'Buat Pengguna'}
+                  <Button type="submit" disabled={isSaving} className="text-sm bg-slate-900 hover:bg-slate-800 text-white">
+                    {isSaving ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Menyimpan...</> : editingUser ? 'Simpan Perubahan' : 'Buat Pengguna'}
                   </Button>
                 </div>
               </form>

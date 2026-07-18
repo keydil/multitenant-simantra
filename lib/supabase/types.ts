@@ -146,6 +146,23 @@ export type Database = {
         >;
         Update: Partial<Database['public']['Tables']['tenant_themes']['Insert']>;
       };
+      guest_book: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          name: string;
+          institution: string;
+          purpose: string;
+          phone: string;
+          photo_url: string | null;
+          created_at: string;
+        };
+        Insert: Omit<
+          Database['public']['Tables']['guest_book']['Row'],
+          'id' | 'created_at'
+        >;
+        Update: Partial<Database['public']['Tables']['guest_book']['Insert']>;
+      };
     };
     Views: {
       active_queues: {
@@ -190,3 +207,5 @@ export type AnalyticsDaily = Database['public']['Tables']['analytics_daily']['Ro
 export type TenantTheme = Database['public']['Tables']['tenant_themes']['Row'];
 export type ActiveQueue = Database['public']['Views']['active_queues']['Row'];
 export type QueueStatusSummary = Database['public']['Views']['queue_status_summary']['Row'];
+export type GuestBook = Database['public']['Tables']['guest_book']['Row'];
+

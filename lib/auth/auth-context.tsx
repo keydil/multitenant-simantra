@@ -14,45 +14,54 @@ export interface AuthUser extends User {
 interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
+  signingOut: boolean;
   error: string | null;
-  signUp: (email: string, password: string, fullName: string, tenantId: string) => Promise<void>;
-  signIn: (email: string, password: string) => Promise<void>;
+  signInSuperadmin: (email: string, password: string) => Promise<void>;
+  signInTenant: (email: string, password: string, tenantSlug: string) => Promise<void>;
   signOut: () => Promise<void>;
   isAuthenticated: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Helper: fetch user profile dari tenant_users
+async function fetchUserProfile(authUserId: string) {
+  const { data, error } = await supabase
+    .from('tenant_users')
+    .select('role, tenant_id, full_name, tenants(subdomain)')
+    .eq('auth_user_id', authUserId)
+    .single();
+
+  if (error) throw new Error('Profil pengguna tidak ditemukan');
+  return data as any;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Cek session aktif saat pertama load
   useEffect(() => {
-    // Check current session
     const checkAuth = async () => {
       try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
+        // Pakai getUser() bukan getSession() — lebih secure
+        const { data: { user: authUser } } = await supabase.auth.getUser();
 
-        if (session?.user) {
-          // Fetch tenant user data
-          const { data: tenantUser } = await (supabase
-            .from('tenant_users')
-            .select('*')
-            .eq('auth_user_id', session.user.id)
-            .single() as any);
-
+        if (authUser) {
+          const profile = await fetchUserProfile(authUser.id);
           setUser({
-            ...session.user,
-            tenant_id: (tenantUser as any)?.tenant_id,
-            full_name: (tenantUser as any)?.full_name,
-            role: (tenantUser as any)?.role,
+            ...authUser,
+            tenant_id: profile.tenant_id,
+            full_name: profile.full_name,
+            role: profile.role,
+            tenant_slug: profile.tenants?.subdomain,
           } as AuthUser);
         }
       } catch (err) {
-        console.error('[v0] Auth check error:', err);
+        console.error('[auth] Session check error:', err);
+        setUser(null);
       } finally {
         setLoading(false);
       }
@@ -60,125 +69,155 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     checkAuth();
 
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
-      if (session?.user) {
-        const { data: tenantUser } = await (supabase
-          .from('tenant_users')
-          .select('*')
-          .eq('auth_user_id', session.user.id)
-          .single() as any);
-
-        setUser({
-          ...session.user,
-          tenant_id: (tenantUser as any)?.tenant_id,
-          full_name: (tenantUser as any)?.full_name,
-          role: (tenantUser as any)?.role,
-        } as AuthUser);
-      } else {
-        setUser(null);
+    // Listen perubahan auth state (logout, token refresh, dll)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (session?.user) {
+          try {
+            const profile = await fetchUserProfile(session.user.id);
+            setUser({
+              ...session.user,
+              tenant_id: profile.tenant_id,
+              full_name: profile.full_name,
+              role: profile.role,
+              tenant_slug: profile.tenants?.subdomain,
+            } as AuthUser);
+          } catch {
+            setUser(null);
+          }
+        } else {
+          setUser(null);
+        }
+        setLoading(false);
       }
-      setLoading(false);
-    });
+    );
 
-    return () => {
-      subscription?.unsubscribe();
-    };
+    return () => subscription?.unsubscribe();
   }, []);
 
-  const signUp = async (
+  // =========================================================================
+  // SIGN IN SUPERADMIN — khusus untuk /auth/login
+  // Tolak kalau bukan superadmin
+  // =========================================================================
+  const signInSuperadmin = async (email: string, password: string) => {
+    setError(null);
+    try {
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (authError) throw new Error('Email atau password salah');
+      if (!data.user) throw new Error('Login gagal');
+
+      const profile = await fetchUserProfile(data.user.id);
+
+      // Guard: tolak kalau bukan superadmin
+      if (profile.role !== 'superadmin') {
+        await supabase.auth.signOut();
+        throw new Error('Akses ditolak. Halaman ini hanya untuk Superadmin.');
+      }
+
+      setUser({
+        ...data.user,
+        tenant_id: null,
+        full_name: profile.full_name,
+        role: 'superadmin',
+        tenant_slug: undefined,
+      } as AuthUser);
+
+      window.location.href = '/dashboard';
+
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Login gagal';
+      setError(message);
+      throw new Error(message);
+    }
+  };
+
+  // =========================================================================
+  // SIGN IN TENANT — khusus untuk /[tenant]/login
+  // Tolak kalau superadmin, atau tenant tidak cocok
+  // =========================================================================
+  const signInTenant = async (
     email: string,
     password: string,
-    fullName: string,
-    tenantId: string
+    tenantSlug: string
   ) => {
     setError(null);
     try {
-      // Create auth user
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (authError) throw authError;
-      if (!authData.user) throw new Error('Failed to create user');
+      if (authError) throw new Error('Email atau password salah');
+      if (!data.user) throw new Error('Login gagal');
 
-      // Create tenant user record
-      const { error: dbError } = await (supabase.from('tenant_users').insert([
-        {
-          tenant_id: tenantId,
-          auth_user_id: authData.user.id,
-          email,
-          full_name: fullName,
-          role: 'operator', // Default role for new users
-        },
-      ] as any) as any);
+      const profile = await fetchUserProfile(data.user.id);
 
-      if (dbError) throw dbError;
+      // Guard 1: tolak superadmin
+      if (profile.role === 'superadmin') {
+        await supabase.auth.signOut();
+        throw new Error('Superadmin tidak dapat login melalui portal instansi. Gunakan halaman login Superadmin.');
+      }
+
+      // Guard 2: tolak kalau tenant tidak cocok
+      const userTenantSlug = profile.tenants?.subdomain;
+      if (userTenantSlug !== tenantSlug) {
+        await supabase.auth.signOut();
+        throw new Error('Anda bukan petugas instansi ini.');
+      }
+
+      // Guard 3: tolak kalau role tidak dikenal
+      if (!['admin', 'operator'].includes(profile.role)) {
+        await supabase.auth.signOut();
+        throw new Error('Role tidak valid.');
+      }
 
       setUser({
-        ...authData.user,
-        tenant_id: tenantId,
-        full_name: fullName,
-        role: 'operator',
+        ...data.user,
+        tenant_id: profile.tenant_id,
+        full_name: profile.full_name,
+        role: profile.role,
+        tenant_slug: userTenantSlug,
       } as AuthUser);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Sign up failed';
-      setError(message);
-      throw err;
-    }
-  };
 
-  const signIn = async (email: string, password: string) => {
-    setError(null);
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) throw error;
-
-      // Fetch tenant user data and redirect based on role
-      if (data.user) {
-        const { data: tenantUser } = await (supabase
-          .from('tenant_users')
-          .select('role, tenant_id, tenants(subdomain)')
-          .eq('auth_user_id', data.user.id)
-          .single() as any);
-
-        if (tenantUser) {
-          const role = (tenantUser as any).role;
-          const tenantSlug = ((tenantUser as any).tenants as any)?.subdomain;
-
-          // Redirect based on role
-          if (typeof window !== 'undefined') {
-            if (role === 'superadmin') {
-              window.location.href = '/dashboard';
-            } else if (role === 'admin' && tenantSlug) {
-              window.location.href = `/${tenantSlug}/admin`;
-            } else if (role === 'operator' && tenantSlug) {
-              window.location.href = `/${tenantSlug}/operator`;
-            }
-          }
-        }
+      // Redirect sesuai role
+      if (profile.role === 'admin') {
+        window.location.href = `/${tenantSlug}/admin`;
+      } else if (profile.role === 'operator') {
+        window.location.href = `/${tenantSlug}/operator`;
       }
+
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sign in failed');
-      throw err;
+      const message = err instanceof Error ? err.message : 'Login gagal';
+      setError(message);
+      throw new Error(message);
     }
   };
 
+  // =========================================================================
+  // SIGN OUT
+  // =========================================================================
   const signOut = async () => {
     setError(null);
+    setSigningOut(true);
     try {
+      // Simpan info redirect sebelum clear state
+      const redirectUrl = user?.tenant_slug
+        ? `/${user.tenant_slug}/login`
+        : '/auth/login';
+
       const { error: signOutError } = await supabase.auth.signOut();
       if (signOutError) throw signOutError;
       setUser(null);
+      // Small delay so the "Logging out" overlay is visible
+      await new Promise((r) => setTimeout(r, 500));
+      window.location.href = redirectUrl;
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Sign out failed';
+      setSigningOut(false);
+      const message = err instanceof Error ? err.message : 'Logout gagal';
       setError(message);
       throw err;
     }
@@ -189,9 +228,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         loading,
+        signingOut,
         error,
-        signUp,
-        signIn,
+        signInSuperadmin,
+        signInTenant,
         signOut,
         isAuthenticated: !!user,
       }}

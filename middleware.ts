@@ -1,7 +1,8 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-const PUBLIC_TENANT_AREAS = ['display', 'queue', 'guest-book', 'status'];
+// 'login' ditambah di sini — tenant login page ga butuh auth
+const PUBLIC_TENANT_AREAS = ['login', 'display', 'queue', 'guest-book', 'status'];
 const RESERVED_SLUGS = ['auth', 'dashboard', 'api', '_next', 'favicon.ico'];
 
 export async function middleware(request: NextRequest) {
@@ -33,20 +34,25 @@ export async function middleware(request: NextRequest) {
   const area = pathSegments[1];
 
   // Skip static files
-  if (pathname.startsWith('/_next') || pathname.startsWith('/api') || pathname.includes('favicon')) {
+  if (
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/api') ||
+    pathname.includes('favicon')
+  ) {
     return response;
   }
 
   // =========================================================================
-  // AUTH ROUTES — boleh akses tanpa login
+  // AUTH ROUTES (/auth/*) — khusus superadmin login
   // =========================================================================
   if (pathname.startsWith('/auth')) {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return response;
+    if (!user) return response; // belum login → tampilkan halaman login
 
+    // Udah login → redirect ke area yang bener
     const { data: tenantUser } = await supabase
       .from('tenant_users')
-      .select('role, tenant_id, tenants(subdomain)')
+      .select('role, tenants(subdomain)')
       .eq('auth_user_id', user.id)
       .single();
 
@@ -60,12 +66,14 @@ export async function middleware(request: NextRequest) {
   }
 
   // =========================================================================
-  // PUBLIC TENANT PAGES — kiosk, display, queue (no auth needed)
+  // PUBLIC TENANT PAGES — login, kiosk, display, queue, guest-book, status
+  // Semua ini ga butuh auth
   // =========================================================================
   if (tenantSlug && !RESERVED_SLUGS.includes(tenantSlug)) {
     const isPublicArea = !area || PUBLIC_TENANT_AREAS.includes(area);
 
     if (isPublicArea) {
+      // Validasi tenant aktif dulu
       const { data: tenant } = await supabase
         .from('tenants')
         .select('id, is_active')
@@ -73,9 +81,37 @@ export async function middleware(request: NextRequest) {
         .single();
 
       if (!tenant || !tenant.is_active) {
-        return NextResponse.redirect(new URL('/auth/login', request.url));
+        // Kalau dari area tenant → redirect ke halaman error, bukan superadmin
+        return NextResponse.redirect(new URL(`/${tenantSlug}/login`, request.url));
       }
 
+      // Kalau buka /[tenant]/login tapi udah ada session
+      // → redirect ke area yang bener, jangan tampilkan login lagi
+      if (area === 'login') {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: tenantUser } = await supabase
+            .from('tenant_users')
+            .select('role, tenants(subdomain)')
+            .eq('auth_user_id', user.id)
+            .single();
+
+          const role = (tenantUser as any)?.role;
+          const slug = (tenantUser as any)?.tenants?.subdomain;
+
+          if (role === 'superadmin') {
+            return NextResponse.redirect(new URL('/dashboard', request.url));
+          }
+          if (role === 'admin' && slug) {
+            return NextResponse.redirect(new URL(`/${slug}/admin`, request.url));
+          }
+          if (role === 'operator' && slug) {
+            return NextResponse.redirect(new URL(`/${slug}/operator`, request.url));
+          }
+        }
+      }
+
+      // Inject tenant info ke headers untuk Server Components
       response.headers.set('x-tenant-slug', tenantSlug);
       response.headers.set('x-tenant-id', tenant.id);
       return response;
@@ -83,11 +119,15 @@ export async function middleware(request: NextRequest) {
   }
 
   // =========================================================================
-  // SEMUA PROTECTED ROUTES — butuh auth
+  // PROTECTED ROUTES — semua yang butuh auth
   // =========================================================================
   const { data: { user }, error: authError } = await supabase.auth.getUser();
 
   if (!user || authError) {
+    // Kalau dari area tenant → redirect ke tenant login, bukan superadmin
+    if (tenantSlug && !RESERVED_SLUGS.includes(tenantSlug)) {
+      return NextResponse.redirect(new URL(`/${tenantSlug}/login`, request.url));
+    }
     return NextResponse.redirect(new URL('/auth/login', request.url));
   }
 
@@ -120,26 +160,32 @@ export async function middleware(request: NextRequest) {
   }
 
   // Tenant admin/operator
-  if (tenantSlug && !RESERVED_SLUGS.includes(tenantSlug) && (area === 'admin' || area === 'operator')) {
+  if (
+    tenantSlug &&
+    !RESERVED_SLUGS.includes(tenantSlug) &&
+    (area === 'admin' || area === 'operator')
+  ) {
     if (!userTenantData?.is_active)
-      return NextResponse.redirect(new URL('/auth/login', request.url));
+      return NextResponse.redirect(new URL(`/${tenantSlug}/login`, request.url));
 
+    // Cek slug cocok
     if (userTenantData?.subdomain !== tenantSlug) {
       if (userRole === 'admin')
         return NextResponse.redirect(new URL(`/${userTenantData.subdomain}/admin`, request.url));
       if (userRole === 'operator')
         return NextResponse.redirect(new URL(`/${userTenantData.subdomain}/operator`, request.url));
-      return NextResponse.redirect(new URL('/auth/login', request.url));
+      return NextResponse.redirect(new URL(`/${tenantSlug}/login`, request.url));
     }
 
+    // Cek role vs area
     if (area === 'admin' && userRole !== 'admin') {
       if (userRole === 'operator')
         return NextResponse.redirect(new URL(`/${tenantSlug}/operator`, request.url));
-      return NextResponse.redirect(new URL('/auth/login', request.url));
+      return NextResponse.redirect(new URL(`/${tenantSlug}/login`, request.url));
     }
 
     if (area === 'operator' && userRole !== 'operator' && userRole !== 'admin')
-      return NextResponse.redirect(new URL('/auth/login', request.url));
+      return NextResponse.redirect(new URL(`/${tenantSlug}/login`, request.url));
 
     response.headers.set('x-user-role', userRole);
     response.headers.set('x-tenant-slug', tenantSlug);
@@ -149,7 +195,8 @@ export async function middleware(request: NextRequest) {
 
   // Root redirect
   if (pathname === '/') {
-    if (userRole === 'superadmin') return NextResponse.redirect(new URL('/dashboard', request.url));
+    if (userRole === 'superadmin')
+      return NextResponse.redirect(new URL('/dashboard', request.url));
     if (userRole === 'admin' && userTenantData?.subdomain)
       return NextResponse.redirect(new URL(`/${userTenantData.subdomain}/admin`, request.url));
     if (userRole === 'operator' && userTenantData?.subdomain)
