@@ -46,8 +46,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        // Pakai getUser() bukan getSession() — lebih secure
-        const { data: { user: authUser } } = await supabase.auth.getUser();
+        // getSession() (baca lokal, tanpa network round-trip) cukup di
+        // sini — ini bukan security boundary. middleware.ts sudah jadi
+        // gate sebenarnya lewat getUser() (revalidasi ke server Supabase)
+        // sebelum halaman manapun yang protected diizinkan render. Cek di
+        // client ini murni buat isi state UI (nama/role/tenant di layout),
+        // jadi getSession() aman dipakai dan jauh lebih cepat.
+        const { data: { session } } = await supabase.auth.getSession();
+        const authUser = session?.user;
 
         if (authUser) {
           const profile = await fetchUserProfile(authUser.id);
