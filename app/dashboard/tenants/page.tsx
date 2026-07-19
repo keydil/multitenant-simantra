@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { TenantsTable, Tenant } from '@/components/tenants-table';
 import { AddTenantDialog, TenantFormData } from '@/components/add-tenant-dialog';
-import { Palette } from 'lucide-react';
+import { Palette, Plus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useTenants, useTenantTheme } from '@/hooks/use-tenant-data';
 import { tenantQueries, themeQueries } from '@/lib/supabase/queries';
@@ -135,7 +135,7 @@ export default function TenantsPage() {
       </div>
 
       {/* Tenants Table */}
-      <TenantsTable onEdit={handleEditTenant} onDelete={handleDeleteTenant} />
+      <TenantsTable tenants={tenants} onEdit={handleEditTenant} onDelete={handleDeleteTenant} />
 
       {/* Theme Customization */}
       <Card className="border border-slate-200 bg-white rounded-xl">
