@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
 import { createClient } from '@/lib/supabase/client';
 import { LogOut, Loader2, Activity } from 'lucide-react';
+import { AnnouncementBell } from '@/components/announcement-bell';
 
 interface TenantInfo {
   id: string;
@@ -101,6 +102,7 @@ export default function OperatorLayout({ children }: { children: ReactNode }) {
 
           {/* Kanan: info user + logout */}
           <div className="flex items-center gap-3">
+            {tenant?.id && <AnnouncementBell tenantId={tenant.id} brandColor={color} />}
             <div className="text-right hidden sm:block">
               <p className="text-[12px] font-medium text-slate-700">{user.full_name || 'Operator'}</p>
               <p className="text-[10px] text-slate-400">{user.email}</p>

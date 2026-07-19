@@ -10,6 +10,7 @@ import {
   BookOpen, Settings, LogOut, Menu, X, ChevronRight, Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { AnnouncementBell } from '@/components/announcement-bell';
 
 interface TenantInfo {
   id: string;
@@ -219,7 +220,14 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       <main className="flex-1 min-w-0 overflow-auto">
         <div className="lg:hidden h-14" />
         <div className="h-px w-full" style={{ background: `linear-gradient(90deg, transparent, ${color}, transparent)` }} />
-        <div className="p-6 lg:p-8 max-w-6xl mx-auto">{children}</div>
+        <div className="p-6 lg:p-8 max-w-6xl mx-auto">
+          {tenant?.id && (
+            <div className="flex justify-end mb-4">
+              <AnnouncementBell tenantId={tenant.id} brandColor={color} />
+            </div>
+          )}
+          {children}
+        </div>
       </main>
     </div>
   );
