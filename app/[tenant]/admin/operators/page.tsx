@@ -29,7 +29,7 @@ export default function AdminOperatorsPage() {
   const [isOpen, setIsOpen] = useState(false);
   const [editingOp, setEditingOp] = useState<Operator | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [formData, setFormData] = useState({ email: '', full_name: '', role: 'operator' });
+  const [formData, setFormData] = useState({ email: '', full_name: '', role: 'operator', password: '' });
 
   const supabase = createClient();
 
@@ -52,10 +52,10 @@ export default function AdminOperatorsPage() {
   const openDialog = (op?: Operator) => {
     if (op) {
       setEditingOp(op);
-      setFormData({ email: op.email, full_name: op.full_name || '', role: op.role });
+      setFormData({ email: op.email, full_name: op.full_name || '', role: op.role, password: '' });
     } else {
       setEditingOp(null);
-      setFormData({ email: '', full_name: '', role: 'operator' });
+      setFormData({ email: '', full_name: '', role: 'operator', password: '' });
     }
     setIsOpen(true);
   };
@@ -74,16 +74,23 @@ export default function AdminOperatorsPage() {
         if (error) throw error;
         toast.success('Pengguna berhasil diperbarui');
       } else {
-        const { error } = await (supabase as any).from('tenant_users').insert({
-          tenant_id: tenant.id,
-          email: formData.email,
-          full_name: formData.full_name,
-          role: formData.role,
-          is_active: true,
-          auth_user_id: crypto.randomUUID(),
+        // Bikin akun autentikasi + row tenant_users lewat server route (butuh
+        // service role key) — bukan insert langsung, supaya user baru bisa
+        // benar-benar login. Lihat UI_UX_AUDIT.md 3.3.
+        const res = await fetch('/api/admin/create-tenant-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tenant_id: tenant.id,
+            email: formData.email,
+            full_name: formData.full_name,
+            role: formData.role,
+            password: formData.password,
+          }),
         });
-        if (error) throw error;
-        toast.success('Pengguna berhasil ditambahkan');
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || 'Gagal menambah petugas');
+        toast.success('Petugas berhasil ditambahkan. Password sementara wajib diganti saat login pertama.');
       }
       setIsOpen(false);
       await fetchOperators();
@@ -220,6 +227,23 @@ export default function AdminOperatorsPage() {
                   className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
                 />
               </div>
+              {!editingOp && (
+                <div>
+                  <label className="text-xs font-medium text-slate-600 mb-1 block">Password Sementara</label>
+                  <input
+                    type="password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    placeholder="Minimal 8 karakter"
+                    required
+                    minLength={8}
+                    className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Petugas akan diwajibkan mengganti password ini saat login pertama.
+                  </p>
+                </div>
+              )}
               <div>
                 <label className="text-xs font-medium text-slate-600 mb-1 block">Role</label>
                 <div className="flex gap-2">
@@ -236,7 +260,7 @@ export default function AdminOperatorsPage() {
                           ? 'border-transparent ring-2 text-white'
                           : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
                       }`}
-                      style={formData.role === val ? { background: brand, ringColor: brand } : {}}
+                      style={formData.role === val ? { background: brand } : {}}
                     >
                       <p className="text-sm font-medium">{label}</p>
                       <p className={`text-[10px] mt-0.5 ${formData.role === val ? 'text-white/70' : 'text-slate-400'}`}>{desc}</p>

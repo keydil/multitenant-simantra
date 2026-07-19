@@ -19,7 +19,7 @@ export default function UserManagementPage() {
   const [isOpen, setIsOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [formData, setFormData] = useState({ email: '', full_name: '', role: 'operator' });
+  const [formData, setFormData] = useState({ email: '', full_name: '', role: 'operator', password: '' });
 
   useEffect(() => {
     if (!selectedTenantId && tenants.length > 0) {
@@ -30,10 +30,10 @@ export default function UserManagementPage() {
   const handleOpenDialog = (user?: any) => {
     if (user) {
       setEditingUser(user);
-      setFormData({ email: user.email, full_name: user.full_name || '', role: user.role });
+      setFormData({ email: user.email, full_name: user.full_name || '', role: user.role, password: '' });
     } else {
       setEditingUser(null);
-      setFormData({ email: '', full_name: '', role: 'operator' });
+      setFormData({ email: '', full_name: '', role: 'operator', password: '' });
     }
     setIsOpen(true);
   };
@@ -51,16 +51,23 @@ export default function UserManagementPage() {
         if (error) throw error;
         toast.success('Pengguna berhasil diperbarui');
       } else {
-        const { error } = await tenantUserQueries.create({
-          tenant_id: selectedTenantId,
-          email: formData.email,
-          full_name: formData.full_name,
-          role: formData.role,
-          is_active: true,
-          auth_user_id: crypto.randomUUID(), // Placeholder — akan diganti oleh Supabase Auth nanti
+        // Bikin akun autentikasi + row tenant_users lewat server route (butuh
+        // service role key) — bukan insert langsung, supaya user baru bisa
+        // benar-benar login. Lihat UI_UX_AUDIT.md 3.3.
+        const res = await fetch('/api/admin/create-tenant-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tenant_id: selectedTenantId,
+            email: formData.email,
+            full_name: formData.full_name,
+            role: formData.role,
+            password: formData.password,
+          }),
         });
-        if (error) throw error;
-        toast.success('Pengguna berhasil dibuat');
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || 'Gagal membuat pengguna');
+        toast.success('Pengguna berhasil dibuat. Password sementara wajib diganti saat login pertama.');
       }
       setIsOpen(false);
       // Refetch
@@ -176,7 +183,26 @@ export default function UserManagementPage() {
                     <option value="admin">Admin (Akses Penuh)</option>
                     <option value="superadmin">Superadmin (Admin Sistem)</option>
                   </select>
+                  {!editingUser && formData.role === 'superadmin' && (
+                    <p className="text-xs text-slate-400">Superadmin tidak terikat instansi manapun — pilihan tenant di atas diabaikan.</p>
+                  )}
                 </div>
+                {!editingUser && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="password" className="text-sm font-medium text-slate-700">Password Sementara</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      placeholder="Minimal 8 karakter"
+                      className="border-slate-200 text-sm"
+                      required
+                      minLength={8}
+                    />
+                    <p className="text-xs text-slate-400">Pengguna akan diwajibkan mengganti password ini saat login pertama.</p>
+                  </div>
+                )}
                 <div className="flex justify-end gap-2 pt-2">
                   <Button type="button" variant="outline" onClick={() => setIsOpen(false)} className="text-sm border-slate-200">
                     Batal

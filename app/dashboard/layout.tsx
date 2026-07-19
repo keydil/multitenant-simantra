@@ -4,11 +4,12 @@ import { ReactNode, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardSidebar } from '@/components/dashboard-sidebar';
 import { useAuth } from '@/lib/auth/auth-context';
+import { ForcePasswordChange } from '@/components/force-password-change';
 import { Loader2 } from 'lucide-react';
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const { loading, isAuthenticated, signingOut } = useAuth();
+  const { user, loading, isAuthenticated, signingOut } = useAuth();
 
   useEffect(() => {
     if (!loading && !isAuthenticated && !signingOut) {
@@ -53,6 +54,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   }
 
   if (!isAuthenticated) return null;
+
+  // ── Wajib Ganti Password ──
+  if (user?.must_change_password) {
+    return <ForcePasswordChange brandColor="#1e3a5f" />;
+  }
 
   return (
     <div className="flex min-h-screen bg-slate-50">

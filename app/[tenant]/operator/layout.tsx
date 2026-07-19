@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth/auth-context';
 import { createClient } from '@/lib/supabase/client';
 import { LogOut, Loader2, Activity } from 'lucide-react';
 import { AnnouncementBell } from '@/components/announcement-bell';
+import { ForcePasswordChange } from '@/components/force-password-change';
 
 interface TenantInfo {
   id: string;
@@ -82,6 +83,11 @@ export default function OperatorLayout({ children }: { children: ReactNode }) {
   }
 
   const color = tenant?.brand_color || '#1e3a5f';
+
+  // ── Wajib Ganti Password ──
+  if (user.must_change_password) {
+    return <ForcePasswordChange brandColor={color} />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">

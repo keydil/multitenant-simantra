@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AnnouncementBell } from '@/components/announcement-bell';
+import { ForcePasswordChange } from '@/components/force-password-change';
 
 interface TenantInfo {
   id: string;
@@ -114,6 +115,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   }
 
   const color = tenant?.brand_color || '#1e3a5f';
+
+  // ── Wajib Ganti Password ──
+  if (user.must_change_password) {
+    return <ForcePasswordChange brandColor={color} />;
+  }
+
   const nav = getNav(tenantSlug);
   const initials = user.full_name?.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() || 'AD';
 

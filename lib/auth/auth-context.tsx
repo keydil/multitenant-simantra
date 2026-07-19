@@ -7,8 +7,9 @@ import { supabase } from '@/lib/supabase/client';
 export interface AuthUser extends User {
   tenant_id?: string | null;
   full_name?: string;
-  role?: 'superadmin' | 'admin' | 'operator';
+  role?: 'superadmin' | 'admin' | 'operator' | 'viewer';
   tenant_slug?: string;
+  must_change_password?: boolean;
 }
 
 interface AuthContextType {
@@ -20,6 +21,7 @@ interface AuthContextType {
   signInTenant: (email: string, password: string, tenantSlug: string) => Promise<void>;
   signOut: () => Promise<void>;
   isAuthenticated: boolean;
+  clearMustChangePassword: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,7 +30,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 async function fetchUserProfile(authUserId: string) {
   const { data, error } = await supabase
     .from('tenant_users')
-    .select('role, tenant_id, full_name, tenants(subdomain)')
+    .select('role, tenant_id, full_name, must_change_password, tenants(subdomain)')
     .eq('auth_user_id', authUserId)
     .single();
 
@@ -63,6 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             full_name: profile.full_name,
             role: profile.role,
             tenant_slug: profile.tenants?.subdomain,
+            must_change_password: profile.must_change_password ?? false,
           } as AuthUser);
         }
       } catch (err) {
@@ -130,6 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         full_name: profile.full_name,
         role: 'superadmin',
         tenant_slug: undefined,
+        must_change_password: profile.must_change_password ?? false,
       } as AuthUser);
 
       window.location.href = '/dashboard';
@@ -187,6 +191,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         full_name: profile.full_name,
         role: profile.role,
         tenant_slug: userTenantSlug,
+        must_change_password: profile.must_change_password ?? false,
       } as AuthUser);
 
       // Redirect sesuai role
@@ -229,6 +234,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Dipanggil setelah user berhasil ganti password sendiri (lihat
+  // components/force-password-change.tsx), supaya gate-nya langsung hilang
+  // tanpa perlu reload/login ulang.
+  const clearMustChangePassword = () => {
+    setUser((prev) => (prev ? { ...prev, must_change_password: false } : prev));
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -240,6 +252,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signInTenant,
         signOut,
         isAuthenticated: !!user,
+        clearMustChangePassword,
       }}
     >
       {children}

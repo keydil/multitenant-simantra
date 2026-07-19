@@ -28,8 +28,9 @@ export type Database = {
           auth_user_id: string;
           email: string;
           full_name: string | null;
-          role: 'superadmin' | 'admin' | 'operator';
+          role: 'superadmin' | 'admin' | 'operator' | 'viewer';
           is_active: boolean;
+          must_change_password: boolean;
           last_login: string | null;
           created_at: string;
           updated_at: string;
@@ -244,6 +245,13 @@ export type Database = {
       get_public_tenant: {
         Args: { p_slug: string };
         Returns: Database['public']['Tables']['tenants']['Row'] | null;
+      };
+      // See scripts/13-tenant-users-password-management.sql — self-service
+      // RPC called after a user with must_change_password=true sets their
+      // own new password (components/force-password-change.tsx).
+      mark_password_changed: {
+        Args: Record<string, never>;
+        Returns: void;
       };
     };
   };
