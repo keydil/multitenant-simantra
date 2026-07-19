@@ -79,7 +79,12 @@ export async function middleware(request: NextRequest) {
       const { data: tenant } = await supabase.rpc('get_public_tenant', { p_slug: tenantSlug });
 
       if (!tenant) {
-        // Kalau dari area tenant → redirect ke halaman error, bukan superadmin
+        // Kalau udah di halaman login tenant ini, jangan redirect ke diri
+        // sendiri (infinite loop) — biarkan halaman itu render pesan
+        // "tidak ditemukan"-nya sendiri.
+        if (area === 'login') {
+          return response;
+        }
         return NextResponse.redirect(new URL(`/${tenantSlug}/login`, request.url));
       }
 

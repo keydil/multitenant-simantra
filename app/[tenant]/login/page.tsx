@@ -34,16 +34,15 @@ export default function TenantLoginPage() {
   useEffect(() => {
     const fetchTenant = async () => {
       const supabase = createClient();
-      const { data, error } = (await supabase
-        .from("tenants")
-        .select("id, name, logo_url, brand_color, is_active")
-        .eq("subdomain", tenantSlug)
-        .single()) as any;
+      const { data, error } = (await supabase.rpc("get_public_tenant", {
+        p_slug: tenantSlug,
+      })) as any;
 
+      // get_public_tenant sudah filter is_active=true di dalam function,
+      // jadi null mencakup baik "tidak ada" maupun "tidak aktif" — sama
+      // seperti middleware.ts dan hooks/use-tenant.ts, gak dibedakan lagi.
       if (error || !data) {
         setTenantError("Instansi tidak ditemukan");
-      } else if (!data.is_active) {
-        setTenantError("Instansi ini sedang tidak aktif");
       } else {
         setTenant(data);
       }
