@@ -5,6 +5,41 @@ import { NextResponse, type NextRequest } from 'next/server';
 const PUBLIC_TENANT_AREAS = ['login', 'display', 'queue', 'guest-book', 'status'];
 const RESERVED_SLUGS = ['auth', 'dashboard', 'api', '_next', 'favicon.ico'];
 
+// Baca payload JWT tanpa verifikasi ulang — aman dipakai SETELAH getUser()
+// sukses di request yang sama (getUser() sudah revalidasi ke server Auth;
+// ini cuma baca data tambahan dari token yang sudah tervalidasi itu).
+function decodeJwtPayload(token: string): Record<string, any> | null {
+  try {
+    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(atob(base64));
+  } catch {
+    return null;
+  }
+}
+
+// Custom Access Token Hook (scripts/11-custom-access-token-hook.sql) nanam
+// user_role/tenant_id/tenant_slug langsung di JWT, supaya di sini gak perlu
+// query tenant_users lagi tiap navigasi. getSession() baca lokal dari
+// cookie (gratis, gak ada network round-trip) — beda dari getUser() yang
+// tetap wajib dipertahankan di tempat lain sebagai security boundary.
+//
+// Return null kalau claim belum ada (token diterbitkan sebelum hook aktif,
+// atau belum sempat refresh) — pemanggil WAJIB fallback ke query
+// tenant_users manual di kondisi ini, jangan anggap user tanpa role.
+async function getJwtClaims(supabase: ReturnType<typeof createServerClient>) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return null;
+
+  const payload = decodeJwtPayload(session.access_token);
+  if (!payload?.user_role) return null;
+
+  return {
+    role: payload.user_role as string,
+    tenantId: (payload.tenant_id as string | null) ?? undefined,
+    tenantSlug: (payload.tenant_slug as string | null) ?? undefined,
+  };
+}
+
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
     request: { headers: request.headers },
@@ -49,15 +84,24 @@ export async function middleware(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return response; // belum login → tampilkan halaman login
 
-    // Udah login → redirect ke area yang bener
-    const { data: tenantUser } = await supabase
-      .from('tenant_users')
-      .select('role, tenants(subdomain)')
-      .eq('auth_user_id', user.id)
-      .single();
+    // Udah login → redirect ke area yang bener. Coba dari JWT claims dulu
+    // (gratis), fallback ke query tenant_users kalau claim belum ada.
+    const claims = await getJwtClaims(supabase);
+    let role: string | undefined;
+    let slug: string | undefined;
 
-    const role = (tenantUser as any)?.role;
-    const slug = (tenantUser as any)?.tenants?.subdomain;
+    if (claims) {
+      role = claims.role;
+      slug = claims.tenantSlug;
+    } else {
+      const { data: tenantUser } = await supabase
+        .from('tenant_users')
+        .select('role, tenants(subdomain)')
+        .eq('auth_user_id', user.id)
+        .single();
+      role = (tenantUser as any)?.role;
+      slug = (tenantUser as any)?.tenants?.subdomain;
+    }
 
     if (role === 'superadmin') return NextResponse.redirect(new URL('/dashboard', request.url));
     if (role === 'admin' && slug) return NextResponse.redirect(new URL(`/${slug}/admin`, request.url));
@@ -95,14 +139,22 @@ export async function middleware(request: NextRequest) {
       if (area === 'login') {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          const { data: tenantUser } = await supabase
-            .from('tenant_users')
-            .select('role, tenants(subdomain)')
-            .eq('auth_user_id', user.id)
-            .single();
+          const claims = await getJwtClaims(supabase);
+          let role: string | undefined;
+          let slug: string | undefined;
 
-          const role = (tenantUser as any)?.role;
-          const slug = (tenantUser as any)?.tenants?.subdomain;
+          if (claims) {
+            role = claims.role;
+            slug = claims.tenantSlug;
+          } else {
+            const { data: tenantUser } = await supabase
+              .from('tenant_users')
+              .select('role, tenants(subdomain)')
+              .eq('auth_user_id', user.id)
+              .single();
+            role = (tenantUser as any)?.role;
+            slug = (tenantUser as any)?.tenants?.subdomain;
+          }
 
           if (role === 'superadmin') {
             return NextResponse.redirect(new URL('/dashboard', request.url));
@@ -136,28 +188,53 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/auth/login', request.url));
   }
 
-  const { data: tenantUser, error: userError } = await supabase
-    .from('tenant_users')
-    .select('role, tenant_id, tenants(id, subdomain, is_active)')
-    .eq('auth_user_id', user.id)
-    .single();
+  // Fast path: claims dari JWT (lihat scripts/11-custom-access-token-hook.sql)
+  // — skip query tenant_users tiap navigasi kalau claim udah ada.
+  // Trade-off yang disadari: tenant.is_active gak ada di claims, jadi kalau
+  // superadmin nonaktifin tenant pas ada admin/operator-nya lagi login,
+  // itu baru kerasa pas token-nya refresh (~1 jam) atau logout/login ulang
+  // — sama seperti staleness perubahan role. Fallback di bawah (query
+  // manual) selalu dapet data ter-fresh, dipakai kalau claim belum ada.
+  const claims = await getJwtClaims(supabase);
 
-  if (userError || !tenantUser) {
-    console.error('[middleware] Error:', userError?.message);
-    return NextResponse.redirect(new URL('/auth/login', request.url));
+  let userRole: string | undefined;
+  let userTenantId: string | undefined;
+  let userTenantSlug: string | undefined;
+  let userTenantActive = true;
+
+  if (claims) {
+    userRole = claims.role;
+    userTenantId = claims.tenantId;
+    userTenantSlug = claims.tenantSlug;
+  } else {
+    const { data: tenantUser, error: userError } = await supabase
+      .from('tenant_users')
+      .select('role, tenant_id, tenants(id, subdomain, is_active)')
+      .eq('auth_user_id', user.id)
+      .single();
+
+    if (userError || !tenantUser) {
+      console.error('[middleware] Error:', userError?.message);
+      return NextResponse.redirect(new URL('/auth/login', request.url));
+    }
+
+    userRole = (tenantUser as any).role;
+    userTenantId = (tenantUser as any).tenant_id;
+    userTenantSlug = (tenantUser as any).tenants?.subdomain;
+    userTenantActive = (tenantUser as any).tenants?.is_active;
   }
 
-  const userRole = (tenantUser as any).role;
-  const userTenantData = (tenantUser as any).tenants;
-  const userTenantId = (tenantUser as any).tenant_id;
+  if (!userRole) {
+    return NextResponse.redirect(new URL('/auth/login', request.url));
+  }
 
   // Dashboard — superadmin only
   if (pathname.startsWith('/dashboard')) {
     if (userRole !== 'superadmin') {
-      if (userRole === 'admin' && userTenantData?.subdomain)
-        return NextResponse.redirect(new URL(`/${userTenantData.subdomain}/admin`, request.url));
-      if (userRole === 'operator' && userTenantData?.subdomain)
-        return NextResponse.redirect(new URL(`/${userTenantData.subdomain}/operator`, request.url));
+      if (userRole === 'admin' && userTenantSlug)
+        return NextResponse.redirect(new URL(`/${userTenantSlug}/admin`, request.url));
+      if (userRole === 'operator' && userTenantSlug)
+        return NextResponse.redirect(new URL(`/${userTenantSlug}/operator`, request.url));
       return NextResponse.redirect(new URL('/auth/login', request.url));
     }
     response.headers.set('x-user-role', 'superadmin');
@@ -170,15 +247,15 @@ export async function middleware(request: NextRequest) {
     !RESERVED_SLUGS.includes(tenantSlug) &&
     (area === 'admin' || area === 'operator')
   ) {
-    if (!userTenantData?.is_active)
+    if (!userTenantActive)
       return NextResponse.redirect(new URL(`/${tenantSlug}/login`, request.url));
 
     // Cek slug cocok
-    if (userTenantData?.subdomain !== tenantSlug) {
+    if (userTenantSlug !== tenantSlug) {
       if (userRole === 'admin')
-        return NextResponse.redirect(new URL(`/${userTenantData.subdomain}/admin`, request.url));
+        return NextResponse.redirect(new URL(`/${userTenantSlug}/admin`, request.url));
       if (userRole === 'operator')
-        return NextResponse.redirect(new URL(`/${userTenantData.subdomain}/operator`, request.url));
+        return NextResponse.redirect(new URL(`/${userTenantSlug}/operator`, request.url));
       return NextResponse.redirect(new URL(`/${tenantSlug}/login`, request.url));
     }
 
@@ -202,10 +279,10 @@ export async function middleware(request: NextRequest) {
   if (pathname === '/') {
     if (userRole === 'superadmin')
       return NextResponse.redirect(new URL('/dashboard', request.url));
-    if (userRole === 'admin' && userTenantData?.subdomain)
-      return NextResponse.redirect(new URL(`/${userTenantData.subdomain}/admin`, request.url));
-    if (userRole === 'operator' && userTenantData?.subdomain)
-      return NextResponse.redirect(new URL(`/${userTenantData.subdomain}/operator`, request.url));
+    if (userRole === 'admin' && userTenantSlug)
+      return NextResponse.redirect(new URL(`/${userTenantSlug}/admin`, request.url));
+    if (userRole === 'operator' && userTenantSlug)
+      return NextResponse.redirect(new URL(`/${userTenantSlug}/operator`, request.url));
   }
 
   return response;
