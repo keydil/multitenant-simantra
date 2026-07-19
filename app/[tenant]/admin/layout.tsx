@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth/auth-context';
 import { createClient } from '@/lib/supabase/client';
 import {
   LayoutDashboard, Users, ListOrdered,
-  BookOpen, Settings, LogOut, Menu, X, ChevronRight, Loader2,
+  BookOpen, Settings, LogOut, Menu, X, ChevronRight, Loader2, BarChart3,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AnnouncementBell } from '@/components/announcement-bell';
@@ -32,6 +32,7 @@ const getNav = (slug: string) => [
     items: [
       { name: 'Kelola Loket', href: `/${slug}/admin/counters`, icon: ListOrdered },
       { name: 'Kelola Operator', href: `/${slug}/admin/operators`, icon: Users },
+      { name: 'Analitik', href: `/${slug}/admin/analytics`, icon: BarChart3 },
     ],
   },
   {
