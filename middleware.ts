@@ -78,7 +78,9 @@ export async function middleware(request: NextRequest) {
       // dilakukan di dalam function, jadi null berarti "tidak ada / tidak aktif")
       const { data: tenant } = await supabase.rpc('get_public_tenant', { p_slug: tenantSlug });
 
-      if (!tenant) {
+      // RPC "not found" is one row with every column null (Postgres
+      // FROM-clause call convention), not a JS null — check tenant.id.
+      if (!tenant?.id) {
         // Kalau udah di halaman login tenant ini, jangan redirect ke diri
         // sendiri (infinite loop) — biarkan halaman itu render pesan
         // "tidak ditemukan"-nya sendiri.

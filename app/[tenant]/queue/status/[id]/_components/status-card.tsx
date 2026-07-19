@@ -81,13 +81,15 @@ export default function StatusCard() {
   }, [supabase]);
 
   const loadInitial = useCallback(async () => {
+    // RPC "not found" is one row with every column null (Postgres
+    // FROM-clause call convention), not a JS null — check .id, not truthiness.
     const { data: entryData } = await supabase.rpc('get_public_queue_entry', { p_entry_id: entryId });
-    if (!entryData) { setLoading(false); return; }
+    if (!entryData?.id) { setLoading(false); return; }
     setEntry(entryData as QueueEntry);
     prevStatusRef.current = (entryData as QueueEntry).status as QueueStatus;
 
     const { data: queueData } = await supabase.rpc('get_public_queue', { p_queue_id: (entryData as QueueEntry).queue_id });
-    if (queueData) setQueue(queueData as Queue);
+    if (queueData?.id) setQueue(queueData as Queue);
 
     await updatePositionAhead(entryData as QueueEntry);
     setLoading(false);
@@ -110,7 +112,7 @@ export default function StatusCard() {
   useEffect(() => {
     const poll = async () => {
       const { data: updated } = await supabase.rpc('get_public_queue_entry', { p_entry_id: entryId });
-      if (!updated) return;
+      if (!updated?.id) return;
       const entryData = updated as QueueEntry;
       const newStatus = entryData.status as QueueStatus;
       const oldStatus = prevStatusRef.current;

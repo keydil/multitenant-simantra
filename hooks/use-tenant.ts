@@ -15,7 +15,10 @@ export function useTenant(slug: string) {
     const supabase = createClient();
     const { data, error: err } = await supabase.rpc('get_public_tenant', { p_slug: slug });
 
-    if (err || !data) {
+    // RPC "not found" comes back as one row with every column null (Postgres
+    // FROM-clause call convention for a non-SETOF composite-returning
+    // function), not a JS null — check the primary key, not truthiness.
+    if (err || !data?.id) {
       setError('Tenant tidak ditemukan.');
     } else {
       setTenant(data as Tenant);

@@ -26,12 +26,14 @@ export default function TicketCard() {
   const supabase = createClient();
 
   const fetchData = useCallback(async () => {
+    // RPC "not found" is one row with every column null (Postgres
+    // FROM-clause call convention), not a JS null — check .id, not truthiness.
     const { data: entryData } = await supabase.rpc('get_public_queue_entry', { p_entry_id: entryId });
-    if (!entryData) { setLoading(false); return; }
+    if (!entryData?.id) { setLoading(false); return; }
     setEntry(entryData as QueueEntry);
 
     const { data: queueData } = await supabase.rpc('get_public_queue', { p_queue_id: (entryData as QueueEntry).queue_id });
-    if (queueData) setQueue(queueData as Queue);
+    if (queueData?.id) setQueue(queueData as Queue);
 
     const { data: positionAhead } = await supabase.rpc('count_public_queue_position_ahead', { p_entry_id: entryId });
     setPositionAhead(positionAhead ?? 0);

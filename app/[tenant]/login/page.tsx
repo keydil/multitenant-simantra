@@ -41,7 +41,9 @@ export default function TenantLoginPage() {
       // get_public_tenant sudah filter is_active=true di dalam function,
       // jadi null mencakup baik "tidak ada" maupun "tidak aktif" — sama
       // seperti middleware.ts dan hooks/use-tenant.ts, gak dibedakan lagi.
-      if (error || !data) {
+      // "Not found" balik sebagai 1 baris semua kolom null (konvensi
+      // pemanggilan FROM-clause Postgres), bukan JS null — cek data.id.
+      if (error || !data?.id) {
         setTenantError("Instansi tidak ditemukan");
       } else {
         setTenant(data);
