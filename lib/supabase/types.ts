@@ -239,6 +239,12 @@ export type Database = {
         Args: { p_tenant_slug: string; p_queue_id: string };
         Returns: Database['public']['Tables']['queue_entries']['Row'];
       };
+      // See scripts/10-rpc-scoped-public-tenant.sql — replaces the unscoped
+      // tenants_anon_select policy for anon reads (middleware.ts + use-tenant.ts).
+      get_public_tenant: {
+        Args: { p_slug: string };
+        Returns: Database['public']['Tables']['tenants']['Row'] | null;
+      };
     };
   };
 };

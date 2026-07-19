@@ -73,14 +73,12 @@ export async function middleware(request: NextRequest) {
     const isPublicArea = !area || PUBLIC_TENANT_AREAS.includes(area);
 
     if (isPublicArea) {
-      // Validasi tenant aktif dulu
-      const { data: tenant } = await supabase
-        .from('tenants')
-        .select('id, is_active')
-        .eq('subdomain', tenantSlug)
-        .single();
+      // Validasi tenant aktif dulu (RPC scoped by subdomain — lihat
+      // scripts/10-rpc-scoped-public-tenant.sql; filter is_active sudah
+      // dilakukan di dalam function, jadi null berarti "tidak ada / tidak aktif")
+      const { data: tenant } = await supabase.rpc('get_public_tenant', { p_slug: tenantSlug });
 
-      if (!tenant || !tenant.is_active) {
+      if (!tenant) {
         // Kalau dari area tenant → redirect ke halaman error, bukan superadmin
         return NextResponse.redirect(new URL(`/${tenantSlug}/login`, request.url));
       }

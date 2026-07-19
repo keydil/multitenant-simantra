@@ -13,12 +13,7 @@ export function useTenant(slug: string) {
     if (!slug) return;
     setLoading(true);
     const supabase = createClient();
-    const { data, error: err } = await supabase
-      .from('tenants')
-      .select('*')
-      .eq('subdomain', slug)
-      .eq('is_active', true)
-      .single();
+    const { data, error: err } = await supabase.rpc('get_public_tenant', { p_slug: slug });
 
     if (err || !data) {
       setError('Tenant tidak ditemukan.');
