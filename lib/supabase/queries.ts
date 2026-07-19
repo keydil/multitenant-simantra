@@ -193,23 +193,36 @@ export const queueEntryQueries = {
 // ============================================================================
 export const announcementQueries = {
   getActive: async (tenantId?: string) => {
-    // @ts-ignore
-    let query = supabase
-      .from('announcements')
-      .select('*')
-      .eq('is_active', true)
-      .gt('expires_at', new Date().toISOString());
+    const base = () =>
+      supabase
+        .from('announcements')
+        .select('*')
+        .eq('is_active', true)
+        .gt('expires_at', new Date().toISOString());
 
-    if (tenantId) {
+    if (!tenantId) {
       // @ts-ignore
-      query = query.or(
-        `target_tenants.eq.all,and(target_tenants.eq.specific,specific_tenant_ids.contains.["${tenantId}"])`
-      );
+      const { data, error } = await base().order('priority', { ascending: false });
+      return { data: data as Announcement[] | null, error };
     }
 
-    // @ts-ignore
-    const { data, error } = await query.order('priority', { ascending: false });
-    return { data: data as Announcement[] | null, error };
+    // Query terpisah untuk target 'all' vs 'specific' — lebih robust
+    // daripada hand-roll string filter .or()/.contains() (format array
+    // Postgres vs JSON gampang salah dan gagal diam-diam).
+    const [allRes, specificRes] = await Promise.all([
+      // @ts-ignore
+      base().eq('target_tenants', 'all'),
+      // @ts-ignore
+      base().eq('target_tenants', 'specific').contains('specific_tenant_ids', [tenantId]),
+    ]);
+
+    if (allRes.error) return { data: null, error: allRes.error };
+    if (specificRes.error) return { data: null, error: specificRes.error };
+
+    const merged = [...(allRes.data ?? []), ...(specificRes.data ?? [])].sort(
+      (a: any, b: any) => (b.priority ?? 0) - (a.priority ?? 0)
+    );
+    return { data: merged as Announcement[], error: null };
   },
 
   create: async (announcement: any) => {
