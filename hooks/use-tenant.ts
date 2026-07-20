@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { publicQueries } from '@/lib/api/queries';
+import { ApiError } from '@/lib/api/client';
 import type { Tenant } from '@/lib/types/tenant';
 
 export function useTenant(slug: string) {
@@ -12,18 +13,20 @@ export function useTenant(slug: string) {
   const fetch = useCallback(async () => {
     if (!slug) return;
     setLoading(true);
-    const supabase = createClient();
-    const { data, error: err } = await supabase.rpc('get_public_tenant', { p_slug: slug });
-
-    // RPC "not found" comes back as one row with every column null (Postgres
-    // FROM-clause call convention for a non-SETOF composite-returning
-    // function), not a JS null — check the primary key, not truthiness.
-    if (err || !data?.id) {
-      setError('Tenant tidak ditemukan.');
-    } else {
+    try {
+      const data = await publicQueries.getTenant(slug);
       setTenant(data as Tenant);
+      setError(null);
+    } catch (err) {
+      // 404 beneran dari server — tidak ada lagi workaround "1 row semua NULL"
+      setError(
+        err instanceof ApiError && err.statusCode === 404
+          ? 'Tenant tidak ditemukan.'
+          : 'Gagal memuat data instansi.'
+      );
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [slug]);
 
   useEffect(() => {

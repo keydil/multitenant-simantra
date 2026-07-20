@@ -7,14 +7,14 @@ import {
   analyticsQueries,
   themeQueries,
   tenantUserQueries,
-} from '@/lib/supabase/queries';
+} from '@/lib/api/queries';
 import type {
   Tenant,
   Announcement,
   AnalyticsDaily,
   TenantTheme,
   TenantUser,
-} from '@/lib/supabase/types';
+} from '@/lib/api/types';
 
 export const useTenants = () => {
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -24,9 +24,7 @@ export const useTenants = () => {
   useEffect(() => {
     const fetchTenants = async () => {
       try {
-        const { data, error } = await tenantQueries.getAll();
-        if (error) throw error;
-        setTenants(data || []);
+        setTenants(await tenantQueries.getAll());
       } catch (err) {
         setError(err as Error);
       } finally {
@@ -48,9 +46,7 @@ export const useTenant = (tenantId: string) => {
   useEffect(() => {
     const fetchTenant = async () => {
       try {
-        const { data, error } = await tenantQueries.getById(tenantId);
-        if (error) throw error;
-        setTenant(data);
+        setTenant(await tenantQueries.getById(tenantId));
       } catch (err) {
         setError(err as Error);
       } finally {
@@ -74,9 +70,24 @@ export const useAnnouncements = (tenantId?: string) => {
   useEffect(() => {
     const fetchAnnouncements = async () => {
       try {
-        const { data, error } = await announcementQueries.getActive(tenantId);
-        if (error) throw error;
-        setAnnouncements(data || []);
+        if (tenantId) {
+          // Staff: server sudah memfilter aktif + belum expired + target cocok
+          setAnnouncements(await announcementQueries.getActiveForTenant(tenantId));
+        } else {
+          // Superadmin: /announcements = semua; pertahankan semantik lama
+          // hook ini (hanya yang aktif & belum expired, sort priority)
+          const now = Date.now();
+          const all = await announcementQueries.getAll();
+          setAnnouncements(
+            all
+              .filter(
+                (a) =>
+                  a.is_active &&
+                  (a.expires_at === null || new Date(a.expires_at).getTime() > now)
+              )
+              .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0))
+          );
+        }
       } catch (err) {
         setError(err as Error);
       } finally {
@@ -105,13 +116,13 @@ export const useAnalytics = (tenantId: string, days = 30) => {
         startDate.setDate(startDate.getDate() - days);
         const endDate = new Date();
 
-        const { data, error } = await analyticsQueries.getByTenantAndDate(
-          tenantId,
-          startDate.toISOString().split('T')[0],
-          endDate.toISOString().split('T')[0]
+        setAnalytics(
+          await analyticsQueries.getByTenantAndDate(
+            tenantId,
+            startDate.toISOString().split('T')[0],
+            endDate.toISOString().split('T')[0]
+          )
         );
-        if (error) throw error;
-        setAnalytics(data || []);
       } catch (err) {
         setError(err as Error);
       } finally {
@@ -135,9 +146,7 @@ export const useTenantTheme = (tenantId: string) => {
   useEffect(() => {
     const fetchTheme = async () => {
       try {
-        const { data, error } = await themeQueries.getByTenant(tenantId);
-        if (error) throw error;
-        setTheme(data);
+        setTheme(await themeQueries.getByTenant(tenantId));
       } catch (err) {
         setError(err as Error);
       } finally {
@@ -161,9 +170,7 @@ export const useTenantUsers = (tenantId: string) => {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const { data, error } = await tenantUserQueries.getByTenant(tenantId);
-        if (error) throw error;
-        setUsers(data || []);
+        setUsers(await tenantUserQueries.getByTenant(tenantId));
       } catch (err) {
         setError(err as Error);
       } finally {

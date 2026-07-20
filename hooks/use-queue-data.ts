@@ -1,9 +1,8 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { createClient } from '@/lib/supabase/client';
-import { queueQueries, queueEntryQueries } from '@/lib/supabase/queries';
-import type { Queue, QueueEntry, QueueStatusSummary } from '@/lib/supabase/types';
+import { queueQueries, queueEntryQueries } from '@/lib/api/queries';
+import type { Queue, QueueEntry, QueueStatusSummary } from '@/lib/api/types';
 
 export const useQueues = (tenantId: string) => {
   const [queues, setQueues] = useState<Queue[]>([]);
@@ -13,9 +12,7 @@ export const useQueues = (tenantId: string) => {
   useEffect(() => {
     const fetchQueues = async () => {
       try {
-        const { data, error } = await queueQueries.getByTenant(tenantId);
-        if (error) throw error;
-        setQueues(data || []);
+        setQueues(await queueQueries.getByTenant(tenantId));
       } catch (err) {
         setError(err as Error);
       } finally {
@@ -31,54 +28,33 @@ export const useQueues = (tenantId: string) => {
   return { queues, loading, error, setQueues };
 };
 
-export const useQueueEntries = (queueId: string, pollingInterval = 2000) => {
+// Endpoint staff entries sekarang tenant-scoped, jadi hook ini butuh
+// tenantId juga (dulu cukup queueId). Realtime postgres_changes lama
+// diganti polling; WS socket.io menyusul di komponen yang membutuhkan (§4).
+export const useQueueEntries = (tenantId: string, queueId: string, pollingInterval = 2000) => {
   const [entries, setEntries] = useState<QueueEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const supabase = createClient();
 
   const fetchEntries = useCallback(async () => {
+    if (!tenantId || !queueId) return;
     try {
-      const { data, error } = await queueEntryQueries.getByQueue(queueId);
-      if (error) throw error;
-      setEntries(data || []);
+      setEntries(await queueEntryQueries.getByQueue(tenantId, queueId));
+      setError(null);
     } catch (err) {
       setError(err as Error);
     } finally {
       setLoading(false);
     }
-  }, [queueId]);
+  }, [tenantId, queueId]);
 
   useEffect(() => {
-    if (!queueId) return;
+    if (!tenantId || !queueId) return;
 
     fetchEntries();
-
-    // Setup polling for real-time updates
     const interval = setInterval(fetchEntries, pollingInterval);
-
-    // Subscribe to real-time changes
-    const subscription = supabase
-      .channel(`queue:${queueId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'queue_entries',
-          filter: `queue_id=eq.${queueId}`,
-        },
-        () => {
-          fetchEntries();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      clearInterval(interval);
-      supabase.removeChannel(subscription);
-    };
-  }, [queueId, pollingInterval, fetchEntries, supabase]);
+    return () => clearInterval(interval);
+  }, [tenantId, queueId, pollingInterval, fetchEntries]);
 
   return { entries, loading, error, refetch: fetchEntries };
 };
@@ -91,9 +67,7 @@ export const useQueueStatus = (tenantId: string, pollingInterval = 3000) => {
   useEffect(() => {
     const fetchStatus = async () => {
       try {
-        const { data, error } = await queueEntryQueries.getStatusSummary(tenantId);
-        if (error) throw error;
-        setStatusSummary(data || []);
+        setStatusSummary(await queueEntryQueries.getStatusSummary(tenantId));
       } catch (err) {
         setError(err as Error);
       } finally {
@@ -109,61 +83,4 @@ export const useQueueStatus = (tenantId: string, pollingInterval = 3000) => {
   }, [tenantId, pollingInterval]);
 
   return { statusSummary, loading, error };
-};
-
-export const useLiveQueueMonitor = (queueIds: string[]) => {
-  const [allEntries, setAllEntries] = useState<Record<string, QueueEntry[]>>({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-  const supabase = createClient();
-
-  useEffect(() => {
-    if (queueIds.length === 0) return;
-
-    const fetchAllQueues = async () => {
-      try {
-        const promises = queueIds.map((id) =>
-          queueEntryQueries.getByQueue(id)
-        );
-        const results = await Promise.all(promises);
-
-        const merged: Record<string, QueueEntry[]> = {};
-        queueIds.forEach((id, idx) => {
-          merged[id] = results[idx].data || [];
-        });
-        setAllEntries(merged);
-      } catch (err) {
-        setError(err as Error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchAllQueues();
-
-    // Setup subscriptions for all queues
-    const subscriptions = queueIds.map((queueId) =>
-      supabase
-        .channel(`queue:${queueId}`)
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'queue_entries',
-            filter: `queue_id=eq.${queueId}`,
-          },
-          () => {
-            fetchAllQueues();
-          }
-        )
-        .subscribe()
-    );
-
-    return () => {
-      subscriptions.forEach((sub) => supabase.removeChannel(sub));
-    };
-  }, [queueIds, supabase]);
-
-  return { allEntries, loading, error };
 };

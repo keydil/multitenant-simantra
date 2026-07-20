@@ -25,7 +25,7 @@ export function LiveQueueMonitor({
 }: LiveQueueMonitorProps) {
   const { queues, loading: queuesLoading } = useQueues(tenantId);
   const [selectedQueueId, setSelectedQueueId] = useState<string>(queueId || '');
-  const { entries, loading: entriesLoading, refetch } = useQueueEntries(selectedQueueId, refreshInterval);
+  const { entries, loading: entriesLoading, refetch } = useQueueEntries(tenantId, selectedQueueId, refreshInterval);
   const { announcements } = useAnnouncements(tenantId);
   const [isPaused, setIsPaused] = useState(false);
 
