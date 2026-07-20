@@ -4,7 +4,7 @@ import { ReactNode, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
-import { createClient } from '@/lib/supabase/client';
+import { publicQueries } from '@/lib/api/queries';
 import {
   LayoutDashboard, Users, ListOrdered,
   BookOpen, Settings, LogOut, Menu, X, ChevronRight, Loader2, BarChart3,
@@ -63,10 +63,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   }, [user, loading, signingOut, tenantSlug, router]);
 
   useEffect(() => {
-    const supabase = createClient();
-    supabase.from('tenants').select('id,name,logo_url,brand_color')
-      .eq('subdomain', tenantSlug).single()
-      .then(({ data }) => { if (data) setTenant(data); });
+    publicQueries.getTenant(tenantSlug)
+      .then((data) => setTenant(data))
+      .catch(() => {});
   }, [tenantSlug]);
 
   const handleLogout = async () => {

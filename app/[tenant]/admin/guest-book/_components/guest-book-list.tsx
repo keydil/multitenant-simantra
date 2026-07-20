@@ -2,7 +2,8 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { guestBookQueries } from '@/lib/api/queries';
+import type { GuestBook } from '@/lib/api/types';
 import * as XLSX from 'xlsx-js-style';
 import { ArrowLeft, Download, ChevronDown, Search, X, User, ChevronLeft, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
@@ -57,16 +58,32 @@ export default function GuestBookList({ tenantSlug, tenantId, guests, currentPag
   const isFiltered = searchQuery || dateFrom || dateTo || purposeFilter;
 
   const handleExport = async (type: 'filtered' | 'all') => {
-    const supabase = createClient();
-    let q = supabase.from('guest_book').select('*').eq('tenant_id', tenantId).order('created_at', { ascending: false });
-    if (type === 'filtered') {
-      if (searchQuery) q = q.or(`name.ilike.%${searchQuery}%,institution.ilike.%${searchQuery}%`);
-      if (purposeFilter) q = q.ilike('purpose', `%${purposeFilter}%`);
-      if (dateFrom) { const d = new Date(dateFrom); d.setHours(0,0,0,0); q = q.gte('created_at', d.toISOString()); }
-      if (dateTo) { const d = new Date(dateTo); d.setHours(23,59,59,999); q = q.lte('created_at', d.toISOString()); }
+    // Endpoint paginated maks 100/halaman — loop sampai semua terkumpul
+    const filters = type === 'filtered'
+      ? {
+          search: searchQuery || undefined,
+          purpose: purposeFilter || undefined,
+          from: dateFrom
+            ? (() => { const d = new Date(dateFrom); d.setHours(0, 0, 0, 0); return d.toISOString(); })()
+            : undefined,
+          to: dateTo
+            ? (() => { const d = new Date(dateTo); d.setHours(23, 59, 59, 999); return d.toISOString(); })()
+            : undefined,
+        }
+      : {};
+
+    const data: GuestBook[] = [];
+    try {
+      for (let page = 1; ; page++) {
+        const res = await guestBookQueries.getByTenant(tenantId, { ...filters, page, limit: 100 });
+        data.push(...res.data);
+        if (data.length >= res.count || res.data.length === 0) break;
+      }
+    } catch {
+      alert('Gagal mengambil data untuk ekspor. Coba lagi.');
+      return;
     }
-    const { data } = await q;
-    if (!data || data.length === 0) { alert('Tidak ada data untuk diekspor!'); return; }
+    if (data.length === 0) { alert('Tidak ada data untuk diekspor!'); return; }
 
     const rows = data.map((g: Guest) => ({
       'Nama Lengkap': g.name, 'Instansi': g.institution, 'No. Telepon': g.phone,

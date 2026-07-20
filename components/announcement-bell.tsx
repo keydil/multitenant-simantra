@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Bell, AlertTriangle, AlertCircle, Zap, Info } from 'lucide-react';
 import { useAnnouncements } from '@/hooks/use-tenant-data';
-import type { Announcement } from '@/lib/supabase/types';
+import type { Announcement } from '@/lib/api/types';
 
 interface AnnouncementBellProps {
   tenantId: string;

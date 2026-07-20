@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
-import type { QueueEntry, Queue } from '@/lib/supabase/types';
+import type { QueueEntry, Queue } from '@/lib/api/types';
 
 interface KioskDisplayProps {
   currentEntry: QueueEntry | null;

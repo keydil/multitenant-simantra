@@ -18,7 +18,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import type { Tenant } from '@/lib/supabase/types';
+import type { Tenant } from '@/lib/api/types';
 
 export type { Tenant };
 

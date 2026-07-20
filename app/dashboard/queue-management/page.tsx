@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Plus, Edit2, Trash2, Clock, Loader2 } from 'lucide-react';
 import { useTenants } from '@/hooks/use-tenant-data';
 import { useQueues } from '@/hooks/use-queue-data';
-import { queueQueries } from '@/lib/supabase/queries';
+import { queueQueries } from '@/lib/api/queries';
 import { toast } from 'sonner';
 
 export default function QueueManagementPage() {
@@ -57,17 +57,13 @@ export default function QueueManagementPage() {
     setIsSaving(true);
     try {
       if (editingQueue) {
-        const { error } = await queueQueries.update(editingQueue.id, formData);
-        if (error) throw error;
+        await queueQueries.update(editingQueue.id, formData);
         toast.success('Antrian berhasil diperbarui');
       } else {
-        const { error } = await queueQueries.create({
+        await queueQueries.create(selectedTenantId, {
           ...formData,
-          tenant_id: selectedTenantId,
-          is_active: true,
           color_code: '#3B82F6',
         });
-        if (error) throw error;
         toast.success('Antrian berhasil dibuat');
       }
       setIsOpen(false);
@@ -85,8 +81,7 @@ export default function QueueManagementPage() {
   const handleDelete = async (queueId: string) => {
     if (!confirm('Yakin mau hapus antrian ini?')) return;
     try {
-      const { error } = await queueQueries.update(queueId, { is_active: false });
-      if (error) throw error;
+      await queueQueries.update(queueId, { is_active: false });
       toast.success('Antrian berhasil dihapus');
       const prev = selectedTenantId;
       setSelectedTenantId('');

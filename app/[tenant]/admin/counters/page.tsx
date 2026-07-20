@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { queueQueries } from '@/lib/api/queries';
 import { useTenant } from '@/hooks/use-tenant';
 import type { Queue } from '@/lib/types/queue';
 import {
@@ -28,19 +28,18 @@ export default function AdminCountersPage() {
     estimated_service_time_minutes: 15,
   });
 
-  const supabase = createClient();
-
   const fetchQueues = useCallback(async () => {
     if (!tenant) return;
-    const { data } = await supabase
-      .from('queues')
-      .select('*')
-      .eq('tenant_id', tenant.id)
-      .eq('is_active', true)
-      .order('service_code');
-    setQueues((data ?? []) as Queue[]);
-    setLoading(false);
-  }, [tenant, supabase]);
+    try {
+      const data = await queueQueries.getByTenant(tenant.id);
+      data.sort((a, b) => (a.service_code ?? '').localeCompare(b.service_code ?? ''));
+      setQueues(data as Queue[]);
+    } catch {
+      // biarkan list terakhir
+    } finally {
+      setLoading(false);
+    }
+  }, [tenant]);
 
   useEffect(() => {
     fetchQueues();
@@ -69,17 +68,11 @@ export default function AdminCountersPage() {
     setIsSaving(true);
     try {
       if (editingQueue) {
-        const { error } = await (supabase as any).from('queues').update(formData).eq('id', editingQueue.id);
-        if (error) throw error;
+        // Satu set endpoint yang sama dgn halaman superadmin (UI_UX 1.3)
+        await queueQueries.update(editingQueue.id, formData);
         toast.success('Loket berhasil diperbarui');
       } else {
-        const { error } = await (supabase as any).from('queues').insert({
-          ...formData,
-          tenant_id: tenant.id,
-          is_active: true,
-          color_code: '#3B82F6',
-        });
-        if (error) throw error;
+        await queueQueries.create(tenant.id, { ...formData, color_code: '#3B82F6' });
         toast.success('Loket berhasil ditambahkan');
       }
       setIsOpen(false);
@@ -94,8 +87,7 @@ export default function AdminCountersPage() {
   const handleDelete = async (queue: Queue) => {
     if (!confirm(`Hapus loket "${queue.display_name || queue.name}"?`)) return;
     try {
-      const { error } = await (supabase as any).from('queues').update({ is_active: false }).eq('id', queue.id);
-      if (error) throw error;
+      await queueQueries.update(queue.id, { is_active: false });
       toast.success('Loket berhasil dihapus');
       await fetchQueues();
     } catch (err: any) {

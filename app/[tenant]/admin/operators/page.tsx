@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { tenantUserQueries } from '@/lib/api/queries';
 import { useTenant } from '@/hooks/use-tenant';
 import {
   Plus, Edit2, Trash2, Loader2, Mail, Shield, User,
@@ -31,19 +31,17 @@ export default function AdminOperatorsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({ email: '', full_name: '', role: 'operator', password: '' });
 
-  const supabase = createClient();
-
   const fetchOperators = useCallback(async () => {
     if (!tenant) return;
-    const { data } = await supabase
-      .from('tenant_users')
-      .select('*')
-      .eq('tenant_id', tenant.id)
-      .eq('is_active', true)
-      .order('created_at', { ascending: false }) as any;
-    setOperators((data ?? []) as Operator[]);
-    setLoading(false);
-  }, [tenant, supabase]);
+    try {
+      const data = await tenantUserQueries.getByTenant(tenant.id);
+      setOperators(data.filter(u => u.is_active) as Operator[]);
+    } catch {
+      // biarkan list terakhir
+    } finally {
+      setLoading(false);
+    }
+  }, [tenant]);
 
   useEffect(() => {
     fetchOperators();
@@ -66,30 +64,21 @@ export default function AdminOperatorsPage() {
     setIsSaving(true);
     try {
       if (editingOp) {
-        const { error } = await (supabase as any).from('tenant_users').update({
-          email: formData.email,
+        // Email tidak bisa diubah (tidak ada di UpdateUserDto backend)
+        await tenantUserQueries.update(editingOp.id, {
           full_name: formData.full_name,
-          role: formData.role,
-        }).eq('id', editingOp.id);
-        if (error) throw error;
+          role: formData.role as any,
+        });
         toast.success('Pengguna berhasil diperbarui');
       } else {
-        // Bikin akun autentikasi + row tenant_users lewat server route (butuh
-        // service role key) — bukan insert langsung, supaya user baru bisa
-        // benar-benar login. Lihat UI_UX_AUDIT.md 3.3.
-        const res = await fetch('/api/admin/create-tenant-user', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tenant_id: tenant.id,
-            email: formData.email,
-            full_name: formData.full_name,
-            role: formData.role,
-            password: formData.password,
-          }),
+        // POST /users backend — admin otomatis dipaksa ke tenant sendiri,
+        // must_change_password=true (fix permanen ghost account 3.3)
+        await tenantUserQueries.create({
+          email: formData.email,
+          full_name: formData.full_name,
+          role: formData.role as any,
+          password: formData.password,
         });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error || 'Gagal menambah petugas');
         toast.success('Petugas berhasil ditambahkan. Password sementara wajib diganti saat login pertama.');
       }
       setIsOpen(false);
@@ -104,8 +93,7 @@ export default function AdminOperatorsPage() {
   const handleDelete = async (op: Operator) => {
     if (!confirm(`Nonaktifkan akun "${op.full_name || op.email}"?`)) return;
     try {
-      const { error } = await (supabase as any).from('tenant_users').update({ is_active: false }).eq('id', op.id);
-      if (error) throw error;
+      await tenantUserQueries.update(op.id, { is_active: false });
       toast.success('Pengguna berhasil dinonaktifkan');
       await fetchOperators();
     } catch (err: any) {

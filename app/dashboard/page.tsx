@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { KPICards } from '@/components/kpi-cards';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
+import { tenantQueries, queueQueries, queueEntryQueries } from '@/lib/api/queries';
+import type { QueueEntry } from '@/lib/api/types';
 
 interface DashboardStats {
   totalTenants: number;
@@ -36,37 +37,56 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   const fetchDashboardData = useCallback(async () => {
-    const supabase = createClient();
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
+    const since = todayStart.toISOString();
 
     try {
-      // Fetch stats in parallel
-      const [tenantsRes, queueTodayRes, servingRes, completedRes] = await Promise.all([
-        supabase.from('tenants').select('id', { count: 'exact', head: true }).eq('is_active', true),
-        supabase.from('queue_entries').select('id', { count: 'exact', head: true }).gte('entered_at', todayStart.toISOString()),
-        supabase.from('queue_entries').select('id', { count: 'exact', head: true }).eq('status', 'serving'),
-        supabase.from('queue_entries').select('id', { count: 'exact', head: true }).eq('status', 'completed').gte('entered_at', todayStart.toISOString()),
-      ]);
+      // Tidak ada endpoint agregat global — susun dari endpoint per-tenant
+      // (superadmin boleh akses semua tenant; jumlah tenant kecil)
+      const tenants = await tenantQueries.getAll();
+
+      const perTenant = await Promise.all(
+        tenants.map(async (t) => {
+          const [todayEntries, activeEntries, queues] = await Promise.all([
+            // Semua entry hari ini (utk "masuk hari ini" + "selesai hari ini")
+            queueEntryQueries.getByTenant(t.id, {
+              status: 'waiting,serving,completed,no_show,cancelled', since, limit: 500,
+            }),
+            // Serving saat ini (tanpa batas tanggal, sama spt perilaku lama)
+            queueEntryQueries.getByTenant(t.id, { status: 'serving', limit: 500 }),
+            queueQueries.getByTenant(t.id, { includeInactive: true }).catch(() => []),
+          ]);
+          return { tenant: t, todayEntries, activeEntries, queues };
+        })
+      );
 
       setStats({
-        totalTenants: tenantsRes.count ?? 0,
-        totalQueuesToday: queueTodayRes.count ?? 0,
-        totalServing: servingRes.count ?? 0,
-        totalCompleted: completedRes.count ?? 0,
+        totalTenants: tenants.length,
+        totalQueuesToday: perTenant.reduce((n, r) => n + r.todayEntries.length, 0),
+        totalServing: perTenant.reduce((n, r) => n + r.activeEntries.length, 0),
+        totalCompleted: perTenant.reduce(
+          (n, r) => n + r.todayEntries.filter(e => e.status === 'completed').length, 0
+        ),
       });
 
-      // Fetch recent activity (last 10 queue entries across all tenants)
-      const { data: recentEntries } = await supabase
-        .from('queue_entries')
-        .select('ticket_number, status, entered_at, started_at, completed_at, queues(name), tenants(name)')
-        .order('entered_at', { ascending: false })
-        .limit(8) as any;
+      // Recent activity: gabungan entry terbaru lintas tenant
+      const queueNames = new Map<string, string>();
+      const tenantNames = new Map<string, string>();
+      for (const r of perTenant) {
+        tenantNames.set(r.tenant.id, r.tenant.name);
+        for (const q of r.queues) queueNames.set(q.id, q.name);
+      }
 
-      if (recentEntries) {
-        const mapped: ActivityItem[] = recentEntries.map((entry: any) => {
-          const queueName = entry.queues?.name || 'Antrian';
-          const tenantName = entry.tenants?.name || 'Tenant';
+      const recentEntries: QueueEntry[] = perTenant
+        .flatMap(r => r.todayEntries)
+        .sort((a, b) => b.entered_at.localeCompare(a.entered_at))
+        .slice(0, 8);
+
+      {
+        const mapped: ActivityItem[] = recentEntries.map((entry) => {
+          const queueName = queueNames.get(entry.queue_id) || 'Antrian';
+          const tenantName = tenantNames.get(entry.tenant_id) || 'Tenant';
 
           if (entry.status === 'completed') {
             return {

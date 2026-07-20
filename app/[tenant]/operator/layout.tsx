@@ -3,7 +3,7 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
-import { createClient } from '@/lib/supabase/client';
+import { publicQueries } from '@/lib/api/queries';
 import { LogOut, Loader2, Activity } from 'lucide-react';
 import { AnnouncementBell } from '@/components/announcement-bell';
 import { ForcePasswordChange } from '@/components/force-password-change';
@@ -31,10 +31,9 @@ export default function OperatorLayout({ children }: { children: ReactNode }) {
   }, [user, loading, signingOut, tenantSlug, router]);
 
   useEffect(() => {
-    const supabase = createClient();
-    supabase.from('tenants').select('id,name,brand_color')
-      .eq('subdomain', tenantSlug).single()
-      .then(({ data }) => { if (data) setTenant(data); });
+    publicQueries.getTenant(tenantSlug)
+      .then((data) => setTenant(data))
+      .catch(() => {});
   }, [tenantSlug]);
 
   const handleLogout = async () => {

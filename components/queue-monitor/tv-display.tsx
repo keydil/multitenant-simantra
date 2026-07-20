@@ -1,7 +1,7 @@
 'use client';
 
 import { Card } from '@/components/ui/card';
-import type { QueueEntry, Queue, Announcement } from '@/lib/supabase/types';
+import type { QueueEntry, Queue, Announcement } from '@/lib/api/types';
 import { AlertCircle, AlertTriangle, Info, Zap } from 'lucide-react';
 
 interface TVDisplayProps {

@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { Plus, Edit2, Trash2, AlertTriangle, AlertCircle, Zap, Info, Loader2 } from 'lucide-react';
 import { useTenants, useAnnouncements } from '@/hooks/use-tenant-data';
-import { announcementQueries } from '@/lib/supabase/queries';
+import { announcementQueries } from '@/lib/api/queries';
 import { useAuth } from '@/lib/auth/auth-context';
 import { toast } from 'sonner';
 
@@ -73,36 +73,26 @@ export default function AnnouncementsPage() {
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + formData.expires_days);
 
+      // specific_tenant_ids: undefined saat target 'all' (DTO backend menolak
+      // array kosong); created_by diisi server dari token
+      const payload = {
+        title: formData.title,
+        description: formData.description,
+        announcement_type: formData.type as any,
+        target_tenants: (isAllTenants ? 'all' : 'specific') as 'all' | 'specific',
+        specific_tenant_ids: isAllTenants ? undefined : selectedTenantIds,
+        priority: formData.priority,
+        expires_at: expiresAt.toISOString(),
+      };
+
       if (editingAnnouncement) {
-        // UPDATE
-        const { data, error } = await announcementQueries.update(editingAnnouncement.id, {
-          title: formData.title,
-          description: formData.description,
-          announcement_type: formData.type,
-          target_tenants: isAllTenants ? 'all' : 'specific',
-          specific_tenant_ids: isAllTenants ? null : selectedTenantIds,
-          priority: formData.priority,
-          expires_at: expiresAt.toISOString(),
-        });
-        if (error) throw error;
+        const data = await announcementQueries.update(editingAnnouncement.id, payload);
         setAnnouncements((prev: any[]) =>
           prev.map((a) => (a.id === editingAnnouncement.id ? { ...a, ...data } : a))
         );
         toast.success('Pengumuman berhasil diperbarui');
       } else {
-        // INSERT
-        const { data, error } = await announcementQueries.create({
-          title: formData.title,
-          description: formData.description,
-          announcement_type: formData.type,
-          target_tenants: isAllTenants ? 'all' : 'specific',
-          specific_tenant_ids: isAllTenants ? null : selectedTenantIds,
-          priority: formData.priority,
-          is_active: true,
-          expires_at: expiresAt.toISOString(),
-          created_by: user?.id || 'system',
-        });
-        if (error) throw error;
+        const data = await announcementQueries.create({ ...payload, is_active: true });
         if (data) setAnnouncements((prev: any[]) => [data, ...prev]);
         toast.success('Pengumuman berhasil disebar ke semua tenant');
       }
@@ -118,8 +108,7 @@ export default function AnnouncementsPage() {
   const handleDelete = async (id: string) => {
     if (!confirm('Yakin mau hapus pengumuman ini?')) return;
     try {
-      const { error } = await announcementQueries.update(id, { is_active: false });
-      if (error) throw error;
+      await announcementQueries.update(id, { is_active: false });
       setAnnouncements((prev: any[]) => prev.filter((a) => a.id !== id));
       toast.success('Pengumuman dihapus');
     } catch (error: any) {

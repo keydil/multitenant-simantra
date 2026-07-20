@@ -18,7 +18,7 @@ import { AddTenantDialog, TenantFormData } from '@/components/add-tenant-dialog'
 import { Palette, Plus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useTenants, useTenantTheme } from '@/hooks/use-tenant-data';
-import { tenantQueries, themeQueries } from '@/lib/supabase/queries';
+import { tenantQueries, themeQueries } from '@/lib/api/queries';
 
 export default function TenantsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -50,15 +50,25 @@ export default function TenantsPage() {
   const handleAddTenant = async (data: TenantFormData) => {
     try {
       const slug = data.agencyName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
-      const { data: newTenant, error } = await tenantQueries.create({
+      const newTenant = await tenantQueries.create({
         name: data.agencyName,
         subdomain: slug,
-        address: data.address || null,
         brand_color: data.brandColor || '#3B82F6',
-        subscription_tier: data.subscriptionTier || 'free',
-        is_active: true,
+        subscription_tier: 'free',
       });
-      if (error) throw error;
+
+      // Fix UI_UX 3.4: logo dari dialog dulu dibuang — sekarang diupload
+      // beneran (server simpan file + set logo_url otomatis)
+      if (data.logo) {
+        await tenantQueries.uploadLogo(newTenant.id, data.logo).catch(() => {
+          toast({
+            title: 'Tenant dibuat, tapi upload logo gagal',
+            description: 'Coba upload ulang logonya dari pengaturan tenant.',
+            variant: 'destructive',
+          });
+        });
+      }
+
       toast({
         title: 'Tenant berhasil ditambahkan',
         description: `${data.agencyName} telah ditambahkan ke sistem.`,
@@ -82,8 +92,7 @@ export default function TenantsPage() {
   const handleDeleteTenant = async (tenant: Tenant) => {
     if (!confirm(`Yakin mau menonaktifkan ${tenant.name}?`)) return;
     try {
-      const { error } = await tenantQueries.delete(tenant.id);
-      if (error) throw error;
+      await tenantQueries.delete(tenant.id);
       toast({
         title: 'Tenant dinonaktifkan',
         description: `${tenant.name} telah dinonaktifkan.`,
@@ -101,8 +110,7 @@ export default function TenantsPage() {
   const handleSaveTheme = async () => {
     if (!selectedTenant) return;
     try {
-      const { error } = await themeQueries.update(selectedTenant.id, themeFormData);
-      if (error) throw error;
+      await themeQueries.update(selectedTenant.id, themeFormData);
       toast({
         title: 'Theme diperbarui',
         description: `Theme untuk ${selectedTenant.name} berhasil disimpan.`,

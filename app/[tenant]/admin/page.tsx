@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
-import { createClient } from '@/lib/supabase/client';
+import { queueEntryQueries, tenantUserQueries } from '@/lib/api/queries';
 import { Users, ListOrdered, CheckCircle, Clock, TrendingUp, ArrowUpRight } from 'lucide-react';
 
 interface Stats {
@@ -21,47 +21,40 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Admin selalu tenant-scoped — tenant_id langsung dari claims auth,
+    // tidak perlu resolve slug lagi
+    const tenantId = user?.tenant_id;
+    if (!tenantId) return;
+
     const fetchStats = async () => {
-      const supabase = createClient();
+      try {
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
 
-      // Ambil tenant_id dulu
-      const { data: tenant } = await supabase
-        .from('tenants')
-        .select('id')
-        .eq('subdomain', tenantSlug)
-        .single();
+        const [active, completedToday, users] = await Promise.all([
+          queueEntryQueries.getByTenant(tenantId, { status: 'waiting,serving', limit: 500 }),
+          queueEntryQueries.getByTenant(tenantId, {
+            status: 'completed', since: todayStart.toISOString(), limit: 500,
+          }),
+          tenantUserQueries.getByTenant(tenantId),
+        ]);
 
-      if (!tenant) return;
-      const tenantId = (tenant as any).id as string;
-
-      // Fetch stats paralel
-      const [waitingRes, servingRes, completedRes, operatorsRes] = await Promise.all([
-        supabase.from('queue_entries').select('id', { count: 'exact', head: true })
-          .eq('tenant_id', tenantId).eq('status', 'waiting'),
-        supabase.from('queue_entries').select('id', { count: 'exact', head: true })
-          .eq('tenant_id', tenantId).eq('status', 'serving'),
-        supabase.from('queue_entries').select('id', { count: 'exact', head: true })
-          .eq('tenant_id', tenantId).eq('status', 'completed')
-          .gte('entered_at', new Date().toISOString().split('T')[0]),
-        supabase.from('tenant_users').select('id', { count: 'exact', head: true })
-          .eq('tenant_id', tenantId).eq('role', 'operator').eq('is_active', true),
-      ]);
-
-      setStats({
-        totalWaiting: waitingRes.count || 0,
-        totalServing: servingRes.count || 0,
-        totalCompleted: completedRes.count || 0,
-        totalOperators: operatorsRes.count || 0,
-      });
-      setLoading(false);
+        setStats({
+          totalWaiting: active.filter(e => e.status === 'waiting').length,
+          totalServing: active.filter(e => e.status === 'serving').length,
+          totalCompleted: completedToday.length,
+          totalOperators: users.filter(u => u.role === 'operator' && u.is_active).length,
+        });
+        setLoading(false);
+      } catch {
+        // network error — pertahankan angka terakhir
+      }
     };
 
     fetchStats();
-
-    // Realtime update setiap 10 detik
     const interval = setInterval(fetchStats, 10000);
     return () => clearInterval(interval);
-  }, [tenantSlug]);
+  }, [user?.tenant_id]);
 
   const greeting = () => {
     const hour = new Date().getHours();

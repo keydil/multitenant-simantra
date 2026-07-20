@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { tenantQueries, themeQueries } from '@/lib/api/queries';
 import { useTenant } from '@/hooks/use-tenant';
 import { Loader2, Save, Palette, Building2, Globe } from 'lucide-react';
 import { toast } from 'sonner';
@@ -13,10 +13,11 @@ export default function AdminSettingsPage() {
   const { tenant, loading: tenantLoading } = useTenant(tenantSlug);
 
   const [isSaving, setIsSaving] = useState(false);
+  // Skema tenant tidak punya kolom alamat/telepon — field lama "address"
+  // (yang tak pernah tersimpan) diganti "description" yang beneran ada
   const [form, setForm] = useState({
     name: '',
-    address: '',
-    phone: '',
+    description: '',
     brand_color: '#1e40af',
     logo_url: '',
   });
@@ -28,44 +29,38 @@ export default function AdminSettingsPage() {
     background_color: '#FFFFFF',
   });
 
-  const supabase = createClient();
-
   useEffect(() => {
     if (!tenant) return;
     setForm({
       name: tenant.name || '',
-      address: tenant.address || '',
-      phone: (tenant as any).phone || '',
+      description: tenant.description || '',
       brand_color: tenant.brand_color || '#1e40af',
       logo_url: tenant.logo_url || '',
     });
 
-    // Fetch theme
-    supabase.from('tenant_themes').select('*').eq('tenant_id', tenant.id).single()
-      .then(({ data }) => {
-        if (data) {
-          setThemeForm({
-            primary_color: (data as any).primary_color || '#3B82F6',
-            secondary_color: (data as any).secondary_color || '#1E40AF',
-            accent_color: (data as any).accent_color || '#10B981',
-            text_color: (data as any).text_color || '#1F2937',
-            background_color: (data as any).background_color || '#FFFFFF',
-          });
-        }
-      });
-  }, [tenant, supabase]);
+    themeQueries.getByTenant(tenant.id)
+      .then((data) => {
+        setThemeForm({
+          primary_color: data.primary_color || '#3B82F6',
+          secondary_color: data.secondary_color || '#1E40AF',
+          accent_color: data.accent_color || '#10B981',
+          text_color: data.text_color || '#1F2937',
+          background_color: data.background_color || '#FFFFFF',
+        });
+      })
+      .catch(() => {});
+  }, [tenant]);
 
   const handleSaveProfile = async () => {
     if (!tenant) return;
     setIsSaving(true);
     try {
-      const { error } = await (supabase as any).from('tenants').update({
+      await tenantQueries.update(tenant.id, {
         name: form.name,
-        address: form.address,
+        description: form.description || null,
         brand_color: form.brand_color,
         logo_url: form.logo_url || null,
-      }).eq('id', tenant.id);
-      if (error) throw error;
+      } as any);
       toast.success('Profil instansi berhasil diperbarui');
     } catch (err: any) {
       toast.error(`Gagal menyimpan: ${err.message}`);
@@ -78,8 +73,7 @@ export default function AdminSettingsPage() {
     if (!tenant) return;
     setIsSaving(true);
     try {
-      const { error } = await (supabase as any).from('tenant_themes').update(themeForm).eq('tenant_id', tenant.id);
-      if (error) throw error;
+      await themeQueries.update(tenant.id, themeForm);
       toast.success('Theme berhasil diperbarui');
     } catch (err: any) {
       toast.error(`Gagal menyimpan theme: ${err.message}`);
@@ -130,10 +124,10 @@ export default function AdminSettingsPage() {
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-slate-600 mb-1 block">Alamat</label>
+            <label className="text-xs font-medium text-slate-600 mb-1 block">Deskripsi</label>
             <textarea
-              value={form.address}
-              onChange={(e) => setForm({ ...form, address: e.target.value })}
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
               rows={2}
               className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-900 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
             />

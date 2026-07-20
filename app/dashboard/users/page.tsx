@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Plus, Edit2, Trash2, Mail, Shield, Loader2 } from 'lucide-react';
 import { useTenants, useTenantUsers } from '@/hooks/use-tenant-data';
-import { tenantUserQueries } from '@/lib/supabase/queries';
+import { tenantUserQueries } from '@/lib/api/queries';
 import { toast } from 'sonner';
 
 export default function UserManagementPage() {
@@ -43,30 +43,22 @@ export default function UserManagementPage() {
     setIsSaving(true);
     try {
       if (editingUser) {
-        const { error } = await tenantUserQueries.update(editingUser.id, {
-          email: formData.email,
+        // Email tidak bisa diubah (tidak ada di UpdateUserDto backend)
+        await tenantUserQueries.update(editingUser.id, {
           full_name: formData.full_name,
-          role: formData.role,
+          role: formData.role as any,
         });
-        if (error) throw error;
         toast.success('Pengguna berhasil diperbarui');
       } else {
-        // Bikin akun autentikasi + row tenant_users lewat server route (butuh
-        // service role key) — bukan insert langsung, supaya user baru bisa
-        // benar-benar login. Lihat UI_UX_AUDIT.md 3.3.
-        const res = await fetch('/api/admin/create-tenant-user', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tenant_id: selectedTenantId,
-            email: formData.email,
-            full_name: formData.full_name,
-            role: formData.role,
-            password: formData.password,
-          }),
+        // POST /users backend: hash password + must_change_password=true,
+        // aturan role sama dgn route Next lama (yang sudah dihapus)
+        await tenantUserQueries.create({
+          tenant_id: formData.role === 'superadmin' ? undefined : selectedTenantId,
+          email: formData.email,
+          full_name: formData.full_name,
+          role: formData.role as any,
+          password: formData.password,
         });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error || 'Gagal membuat pengguna');
         toast.success('Pengguna berhasil dibuat. Password sementara wajib diganti saat login pertama.');
       }
       setIsOpen(false);
@@ -82,11 +74,10 @@ export default function UserManagementPage() {
   };
 
   const handleDelete = async (userId: string) => {
-    if (!confirm('Yakin mau hapus pengguna ini?')) return;
+    if (!confirm('Yakin mau nonaktifkan pengguna ini?')) return;
     try {
-      const { error } = await tenantUserQueries.update(userId, { is_active: false });
-      if (error) throw error;
-      toast.success('Pengguna berhasil dihapus');
+      await tenantUserQueries.update(userId, { is_active: false });
+      toast.success('Pengguna berhasil dinonaktifkan');
       const prev = selectedTenantId;
       setSelectedTenantId('');
       setTimeout(() => setSelectedTenantId(prev), 50);
@@ -158,7 +149,11 @@ export default function UserManagementPage() {
                     placeholder="pengguna@contoh.com"
                     className="border-slate-200 text-sm"
                     required
+                    disabled={!!editingUser}
                   />
+                  {editingUser && (
+                    <p className="text-xs text-slate-400">Email tidak dapat diubah.</p>
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="full_name" className="text-sm font-medium text-slate-700">Nama Lengkap</Label>
