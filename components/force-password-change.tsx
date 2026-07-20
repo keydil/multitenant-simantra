@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Eye, EyeOff, Loader2, ShieldAlert, AlertCircle } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
+import { ApiError } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/auth-context';
 
 interface ForcePasswordChangeProps {
@@ -14,7 +14,8 @@ interface ForcePasswordChangeProps {
 // password sendiri. Dipasang di semua layout terproteksi (dashboard, admin,
 // operator). Lihat UI_UX_AUDIT.md 3.3.
 export function ForcePasswordChange({ brandColor = '#1e3a5f' }: ForcePasswordChangeProps) {
-  const { clearMustChangePassword } = useAuth();
+  const { changePassword } = useAuth();
+  const [oldPassword, setOldPassword] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -33,19 +34,17 @@ export function ForcePasswordChange({ brandColor = '#1e3a5f' }: ForcePasswordCha
       setError('Konfirmasi password tidak cocok.');
       return;
     }
+    if (password === oldPassword) {
+      setError('Password baru tidak boleh sama dengan password lama.');
+      return;
+    }
 
     setIsSaving(true);
     try {
-      const supabase = createClient();
-      const { error: updateError } = await supabase.auth.updateUser({ password });
-      if (updateError) throw updateError;
-
-      const { error: rpcError } = await supabase.rpc('mark_password_changed');
-      if (rpcError) throw rpcError;
-
-      clearMustChangePassword();
-    } catch (err: any) {
-      setError(err?.message ?? 'Gagal mengubah password. Coba lagi.');
+      await changePassword(oldPassword, password);
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'Gagal mengubah password. Coba lagi.';
+      setError(message);
       setIsSaving(false);
     }
   };
@@ -75,6 +74,18 @@ export function ForcePasswordChange({ brandColor = '#1e3a5f' }: ForcePasswordCha
                   <span className="text-xs leading-relaxed">{error}</span>
                 </div>
               )}
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-600">Password Sementara</label>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={oldPassword}
+                  onChange={(e) => setOldPassword(e.target.value)}
+                  placeholder="Password yang diberikan admin"
+                  required
+                  className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
+                />
+              </div>
 
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-slate-600">Password Baru</label>

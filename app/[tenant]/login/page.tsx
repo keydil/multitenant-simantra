@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth/auth-context";
-import { createClient } from "@/lib/supabase/client";
+import { api } from "@/lib/api/client";
 import { Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
 
 interface TenantInfo {
@@ -33,20 +33,12 @@ export default function TenantLoginPage() {
   // Fetch info tenant dari URL slug
   useEffect(() => {
     const fetchTenant = async () => {
-      const supabase = createClient();
-      const { data, error } = (await supabase.rpc("get_public_tenant", {
-        p_slug: tenantSlug,
-      })) as any;
-
-      // get_public_tenant sudah filter is_active=true di dalam function,
-      // jadi null mencakup baik "tidak ada" maupun "tidak aktif" — sama
-      // seperti middleware.ts dan hooks/use-tenant.ts, gak dibedakan lagi.
-      // "Not found" balik sebagai 1 baris semua kolom null (konvensi
-      // pemanggilan FROM-clause Postgres), bukan JS null — cek data.id.
-      if (error || !data?.id) {
-        setTenantError("Instansi tidak ditemukan");
-      } else {
+      try {
+        const data = await api.get<TenantInfo>(`/public/tenants/${tenantSlug}`, { auth: false });
         setTenant(data);
+      } catch (err) {
+        // 404 = tidak ada/tidak aktif (lihat FRONTEND_MIGRATION.md §2)
+        setTenantError("Instansi tidak ditemukan");
       }
       setTenantLoading(false);
     };
