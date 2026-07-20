@@ -1,8 +1,11 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { queueQueries, queueEntryQueries } from '@/lib/api/queries';
+import { ApiError } from '@/lib/api/client';
+import { useAuth } from '@/lib/auth/auth-context';
+import { useRealtime } from '@/hooks/use-realtime';
 import { useTenant } from '@/hooks/use-tenant';
 import type { Queue, QueueEntry } from '@/lib/types/queue';
 import { Loader2, ArrowLeft } from 'lucide-react';
@@ -41,71 +44,76 @@ export default function OperatorPanel() {
   const [isLoading, setIsLoading] = useState(false);
   const [callCount, setCallCount] = useState(0);
 
-  const supabase = createClient();
+  const { user } = useAuth();
 
   // Fetch queues for tenant
   useEffect(() => {
     if (!tenant) return;
-    supabase.from('queues').select('*')
-      .eq('tenant_id', tenant.id).eq('is_active', true)
-      .order('service_code')
-      .then(({ data }) => {
-        if (data && data.length > 0) {
-          setQueues(data as Queue[]);
-          setSelectedQueueId((data[0] as any).id);
-        }
-      });
-  }, [tenant, supabase]);
-
-  const todayStart = () => { const d = new Date(); d.setHours(0,0,0,0); return d.toISOString(); };
+    queueQueries.getByTenant(tenant.id).then((data) => {
+      if (data.length > 0) {
+        const sorted = [...data].sort((a, b) => (a.service_code ?? '').localeCompare(b.service_code ?? ''));
+        setQueues(sorted as Queue[]);
+        setSelectedQueueId(sorted[0].id);
+      }
+    }).catch(() => {});
+  }, [tenant]);
 
   const loadData = useCallback(async () => {
     if (!selectedQueueId || !tenant) return;
 
-    // Current serving
-    const { data: serving } = await supabase
-      .from('queue_entries').select('*')
-      .eq('queue_id', selectedQueueId).eq('status', 'serving')
-      .order('started_at', { ascending: false }).limit(1);
-    if (serving && serving.length > 0) {
-      setCurrentEntry(serving[0] as QueueEntry);
-      setCallCount(1);
-    } else {
-      setCurrentEntry(null); setCallCount(0);
+    try {
+      // Satu call utk semua list + stats/today pengganti 4 count paralel lama
+      const [entries, statsToday] = await Promise.all([
+        queueEntryQueries.getByQueue(tenant.id, selectedQueueId, {
+          status: 'waiting,serving,no_show',
+          limit: 100,
+        }),
+        queueEntryQueries.getStatsToday(selectedQueueId),
+      ]);
+
+      const serving = entries
+        .filter(e => e.status === 'serving')
+        .sort((a, b) => (b.started_at ?? '').localeCompare(a.started_at ?? ''));
+      if (serving.length > 0) {
+        setCurrentEntry(serving[0] as QueueEntry);
+        setCallCount(c => (c > 0 ? c : 1));
+      } else {
+        setCurrentEntry(null); setCallCount(0);
+      }
+
+      setWaitingEntries(entries.filter(e => e.status === 'waiting').slice(0, 15) as QueueEntry[]);
+      setHoldEntries(entries.filter(e => e.status === 'no_show') as QueueEntry[]);
+      setStats({
+        waiting: statsToday.waiting,
+        completed: statsToday.completed,
+        no_show: statsToday.no_show,
+        cancelled: statsToday.cancelled,
+      });
+    } catch {
+      // network error — pertahankan state terakhir, tick berikut mencoba lagi
     }
+  }, [selectedQueueId, tenant]);
 
-    // Waiting
-    const { data: waiting } = await supabase
-      .from('queue_entries').select('*')
-      .eq('queue_id', selectedQueueId).eq('status', 'waiting')
-      .order('entered_at', { ascending: true }).limit(15);
-    setWaitingEntries((waiting ?? []) as QueueEntry[]);
-
-    // Hold (no_show that can be recalled)
-    const { data: hold } = await supabase
-      .from('queue_entries').select('*')
-      .eq('queue_id', selectedQueueId).eq('status', 'no_show')
-      .order('entered_at', { ascending: true });
-    setHoldEntries((hold ?? []) as QueueEntry[]);
-
-    // Stats today
-    const today = todayStart();
-    const [w, c, ns, ca] = await Promise.all([
-      supabase.from('queue_entries').select('*', { count: 'exact', head: true }).eq('queue_id', selectedQueueId).eq('status', 'waiting').gte('entered_at', today),
-      supabase.from('queue_entries').select('*', { count: 'exact', head: true }).eq('queue_id', selectedQueueId).eq('status', 'completed').gte('entered_at', today),
-      supabase.from('queue_entries').select('*', { count: 'exact', head: true }).eq('queue_id', selectedQueueId).eq('status', 'no_show').gte('entered_at', today),
-      supabase.from('queue_entries').select('*', { count: 'exact', head: true }).eq('queue_id', selectedQueueId).eq('status', 'cancelled').gte('entered_at', today),
-    ]);
-    setStats({ waiting: w.count ?? 0, completed: c.count ?? 0, no_show: ns.count ?? 0, cancelled: ca.count ?? 0 });
-  }, [selectedQueueId, tenant, supabase]);
+  // WS room staff (wajib token — tunggu user siap); polling 5s jadi fallback
+  const wsConnected = useRealtime(
+    user && tenant ? { type: 'staff' } : null,
+    {
+      'entry.created': () => loadData(),
+      'entry.updated': () => loadData(),
+      'entry.called': () => loadData(),
+      'queue.updated': () => loadData(),
+    }
+  );
+  const wsConnectedRef = useRef(wsConnected);
+  wsConnectedRef.current = wsConnected;
 
   useEffect(() => {
     loadData();
-    const ch = supabase.channel(`operator-${selectedQueueId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'queue_entries' }, loadData)
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
-  }, [selectedQueueId, loadData, supabase]);
+    const interval = setInterval(() => {
+      if (!wsConnectedRef.current) loadData();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [loadData]);
 
   const selectedQueue = queues.find(q => q.id === selectedQueueId);
 
@@ -113,14 +121,21 @@ export default function OperatorPanel() {
   const handleCallNext = async () => {
     if (waitingEntries.length === 0 || isLoading) return;
     setIsLoading(true);
-    const next = waitingEntries[0];
     try {
-      await (supabase as any).from('queue_entries').update({
-        status: 'serving', started_at: new Date().toISOString(), service_window: windowNumber,
-      }).eq('id', next.id);
-      speak(`Nomor antrian ${next.ticket_number}, silakan menuju loket ${windowNumber}.`);
+      // Atomik di server — dua operator tidak mungkin memanggil nomor yang
+      // sama. Nomor yang dipanggil = respons server, bukan waitingEntries[0].
+      const called = await queueEntryQueries.callNext(selectedQueueId, windowNumber);
+      speak(`Nomor antrian ${called.ticket_number}, silakan menuju loket ${windowNumber}.`);
       await loadData();
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      if (e instanceof ApiError && e.statusCode === 404) {
+        // Tidak ada yang menunggu (mungkin diserobot operator lain barusan)
+        await loadData();
+      } else {
+        console.error(e);
+        alert('Gagal memanggil antrian. Coba lagi.');
+      }
+    }
     setIsLoading(false);
   };
 
@@ -130,45 +145,34 @@ export default function OperatorPanel() {
     setCallCount(c => c + 1);
   };
 
-  const handleComplete = async () => {
+  const updateStatus = async (status: 'completed' | 'no_show' | 'cancelled') => {
     if (!currentEntry || isLoading) return;
     setIsLoading(true);
-    await (supabase as any).from('queue_entries').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', currentEntry.id);
-    setCurrentEntry(null); setCallCount(0);
-    await loadData();
+    try {
+      // Transisi divalidasi & timestamp diisi server
+      await queueEntryQueries.updateStatus(currentEntry.id, status);
+      setCurrentEntry(null); setCallCount(0);
+      await loadData();
+    } catch (e) {
+      console.error(e);
+      alert('Gagal memperbarui status antrian.');
+      await loadData();
+    }
     setIsLoading(false);
   };
 
-  const handleHold = async () => {
+  const handleComplete = () => updateStatus('completed');
+
+  const handleHold = () => {
     if (!currentEntry || isLoading) return;
-    if (!confirm('Lewati/hold antrian ini?')) return;
-    setIsLoading(true);
-    await (supabase as any).from('queue_entries').update({ status: 'no_show' }).eq('id', currentEntry.id);
-    setCurrentEntry(null); setCallCount(0);
-    await loadData();
-    setIsLoading(false);
+    if (!confirm('Tandai tidak hadir? (Antrian tidak bisa dipanggil ulang — pengunjung harus ambil nomor baru)')) return;
+    updateStatus('no_show');
   };
 
-  const handleCancel = async () => {
+  const handleCancel = () => {
     if (!currentEntry || isLoading) return;
     if (!confirm('Batalkan antrian ini secara permanen?')) return;
-    setIsLoading(true);
-    await (supabase as any).from('queue_entries').update({ status: 'cancelled' }).eq('id', currentEntry.id);
-    setCurrentEntry(null); setCallCount(0);
-    await loadData();
-    setIsLoading(false);
-  };
-
-  const handleRecallFromHold = async (entryId: string) => {
-    if (currentEntry) { alert('Selesaikan antrian yang sedang berjalan dulu.'); return; }
-    setIsLoading(true);
-    await (supabase as any).from('queue_entries').update({
-      status: 'serving', started_at: new Date().toISOString(), service_window: windowNumber,
-    }).eq('id', entryId);
-    const held = holdEntries.find(e => e.id === entryId);
-    if (held) speak(`Nomor antrian ${held.ticket_number}, silakan menuju loket ${windowNumber}.`);
-    await loadData();
-    setIsLoading(false);
+    updateStatus('cancelled');
   };
 
   const brand = tenant?.brand_color ?? '#1e40af';
@@ -253,10 +257,9 @@ export default function OperatorPanel() {
           {waitingEntries.length > 0 && ` — ${waitingEntries[0]?.ticket_number}`}
         </button>
 
-        {/* Hold list */}
-        {holdEntries.length > 0 && (
-          <HoldList entries={holdEntries} brand={brand} isLoading={isLoading} currentEntry={currentEntry} onRecall={handleRecallFromHold} />
-        )}
+        {/* Hold list — informasi saja; no_show terminal di state machine
+            server, tidak bisa dipanggil ulang */}
+        {holdEntries.length > 0 && <HoldList entries={holdEntries} />}
 
         {/* Waiting list */}
         <WaitingList entries={waitingEntries} brand={brand} />
