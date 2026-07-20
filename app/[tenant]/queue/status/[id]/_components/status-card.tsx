@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { publicQueries } from '@/lib/api/queries';
+import { useRealtime } from '@/hooks/use-realtime';
 import { useTenant } from '@/hooks/use-tenant';
 import type { QueueEntry, Queue, QueueStatus } from '@/lib/types/queue';
 import { Clock, CheckCircle2, AlertCircle, Volume2, MapPin, Star, Loader2 } from 'lucide-react';
@@ -73,27 +74,64 @@ export default function StatusCard() {
   const [loading, setLoading] = useState(true);
   const [greeting, setGreeting] = useState('Selamat Datang');
   const prevStatusRef = useRef<QueueStatus | null>(null);
-  const supabase = createClient();
 
   const updatePositionAhead = useCallback(async (e: QueueEntry) => {
-    const { data } = await supabase.rpc('count_public_queue_position_ahead', { p_entry_id: e.id });
-    setPositionAhead(data ?? 0);
-  }, [supabase]);
+    try {
+      const { ahead } = await publicQueries.getEntryPosition(e.id);
+      setPositionAhead(ahead);
+    } catch {
+      // posisi gagal dimuat — pertahankan nilai lama
+    }
+  }, []);
+
+  // Dipakai oleh polling fallback maupun handler WS
+  const applyEntryUpdate = useCallback((entryData: QueueEntry) => {
+    const newStatus = entryData.status as QueueStatus;
+    const oldStatus = prevStatusRef.current;
+
+    if (newStatus === 'serving' && oldStatus !== 'serving') {
+      const loket = entryData.service_window;
+      const msg = loket
+        ? `Nomor antrian ${entryData.ticket_number}, silakan menuju loket ${loket}.`
+        : `Nomor antrian ${entryData.ticket_number}, silakan menuju loket.`;
+      speak(msg);
+    }
+
+    prevStatusRef.current = newStatus;
+    setEntry(entryData);
+    if (newStatus === 'waiting') updatePositionAhead(entryData);
+  }, [updatePositionAhead]);
 
   const loadInitial = useCallback(async () => {
-    // RPC "not found" is one row with every column null (Postgres
-    // FROM-clause call convention), not a JS null — check .id, not truthiness.
-    const { data: entryData } = await supabase.rpc('get_public_queue_entry', { p_entry_id: entryId });
-    if (!entryData?.id) { setLoading(false); return; }
-    setEntry(entryData as QueueEntry);
-    prevStatusRef.current = (entryData as QueueEntry).status as QueueStatus;
+    try {
+      // Tidak ketemu = 404 beneran (ApiError), bukan row NULL gaya RPC lama
+      const entryData = (await publicQueries.getEntry(entryId)) as QueueEntry;
+      setEntry(entryData);
+      prevStatusRef.current = entryData.status as QueueStatus;
 
-    const { data: queueData } = await supabase.rpc('get_public_queue', { p_queue_id: (entryData as QueueEntry).queue_id });
-    if (queueData?.id) setQueue(queueData as Queue);
+      const [queueData] = await Promise.all([
+        publicQueries.getQueue(entryData.queue_id).catch(() => null),
+        updatePositionAhead(entryData),
+      ]);
+      if (queueData) setQueue(queueData as Queue);
+    } catch {
+      // entry null → UI menampilkan "Tiket tidak ditemukan"
+    } finally {
+      setLoading(false);
+    }
+  }, [entryId, updatePositionAhead]);
 
-    await updatePositionAhead(entryData as QueueEntry);
-    setLoading(false);
-  }, [entryId, supabase, updatePositionAhead]);
+  // WebSocket room entry:{id} — server kirim entry.updated/entry.called
+  // (entry.called = trigger TTS "dipanggil"; payload {entry, queue})
+  const wsConnected = useRealtime(
+    entryId ? { type: 'entry', entry_id: entryId } : null,
+    {
+      'entry.updated': (payload) => applyEntryUpdate(payload as QueueEntry),
+      'entry.called': (payload) => applyEntryUpdate((payload as { entry: QueueEntry }).entry),
+    }
+  );
+  const wsConnectedRef = useRef(wsConnected);
+  wsConnectedRef.current = wsConnected;
 
   useEffect(() => {
     const hour = new Date().getHours();
@@ -105,34 +143,21 @@ export default function StatusCard() {
     loadInitial();
   }, [loadInitial]);
 
-  // Polling every 3s (replaces realtime — Supabase Realtime enforces RLS,
-  // and anon no longer has direct SELECT on queue_entries; see
-  // MIGRATION_AUDIT.md Kritis #2). Also covers what the old separate
-  // "position ahead" poll did, so that effect was folded into this one.
+  // Polling 3s dipertahankan sebagai FALLBACK — di-skip saat socket
+  // tersambung (event WS yang mendorong pembaruan).
   useEffect(() => {
     const poll = async () => {
-      const { data: updated } = await supabase.rpc('get_public_queue_entry', { p_entry_id: entryId });
-      if (!updated?.id) return;
-      const entryData = updated as QueueEntry;
-      const newStatus = entryData.status as QueueStatus;
-      const oldStatus = prevStatusRef.current;
-
-      if (newStatus === 'serving' && oldStatus !== 'serving' && queue) {
-        const loket = entryData.service_window;
-        const msg = loket
-          ? `Nomor antrian ${entryData.ticket_number}, silakan menuju loket ${loket}.`
-          : `Nomor antrian ${entryData.ticket_number}, silakan menuju loket.`;
-        speak(msg);
+      if (wsConnectedRef.current) return;
+      try {
+        applyEntryUpdate((await publicQueries.getEntry(entryId)) as QueueEntry);
+      } catch {
+        // entry hilang/network error — biarkan state terakhir
       }
-
-      prevStatusRef.current = newStatus;
-      setEntry(entryData);
-      if (newStatus === 'waiting') await updatePositionAhead(entryData);
     };
 
     const interval = setInterval(poll, 3000);
     return () => clearInterval(interval);
-  }, [entryId, supabase, queue, updatePositionAhead]);
+  }, [entryId, applyEntryUpdate]);
 
   if (loading) {
     return (

@@ -2,9 +2,9 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { guestBookQueries } from '@/lib/api/queries';
+import { ApiError } from '@/lib/api/client';
 import { useTenant } from '@/hooks/use-tenant';
-import { useGuestBook } from '@/hooks/use-guest-book';
 import { ArrowLeft, Camera, CheckCircle2, RefreshCw, AlertCircle, Search, Building2, User, Loader2 } from 'lucide-react';
 
 const PURPOSE_OPTIONS = [
@@ -20,7 +20,6 @@ export default function GuestBookForm() {
   const [form, setForm] = useState({ name: '', institution: '', purpose: '', phone: '' });
   const [isPersonal, setIsPersonal] = useState(false);
   const [selectedChip, setSelectedChip] = useState('');
-  const [institutions, setInstitutions] = useState<string[]>([]);
   const [filtered, setFiltered] = useState<string[]>([]);
   const [showSuggest, setShowSuggest] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
@@ -32,27 +31,25 @@ export default function GuestBookForm() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const supabase = createClient();
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Fetch institutions autocomplete
-  useEffect(() => {
-    if (!tenant) return;
-    supabase.from('guest_book').select('institution')
-      .eq('tenant_id', tenant.id).not('institution', 'is', null)
-      .neq('institution', '-').neq('institution', 'Pribadi (Non-Instansi)')
-      .then(({ data }) => {
-        const list = Array.from(new Set((data ?? []).map((d: any) => d.institution).filter(Boolean))).sort();
-        setInstitutions(list as string[]);
-      });
-  }, [tenant, supabase]);
-
+  // Autocomplete institusi: server-side search (hasil endpoint dibatasi 10,
+  // jadi filter client-side atas satu fetch besar tidak lagi memadai),
+  // debounce 250ms per ketikan.
   const handleInstitutionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setForm(f => ({ ...f, institution: val }));
-    if (val.length > 0) {
-      setFiltered(institutions.filter(i => i.toLowerCase().includes(val.toLowerCase())));
-      setShowSuggest(true);
-    } else setShowSuggest(false);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    if (val.length === 0) { setShowSuggest(false); return; }
+    searchTimerRef.current = setTimeout(async () => {
+      try {
+        const list = await guestBookQueries.getInstitutions(tenantSlug, val);
+        setFiltered(list.filter(i => i && i !== '-' && i !== 'Pribadi (Non-Instansi)'));
+        setShowSuggest(true);
+      } catch {
+        setShowSuggest(false);
+      }
+    }, 250);
   };
 
   const handleChip = (opt: string) => {
@@ -112,21 +109,16 @@ export default function GuestBookForm() {
     if (!tenant || !photoUrl) return;
     setIsSubmitting(true);
     try {
-      let uploadedUrl: string | null = null;
-      if (photoUrl) {
-        const blob = await (await fetch(photoUrl)).blob();
-        const fileName = `guest-${tenant.id}-${Date.now()}.jpg`;
-        const { data } = await supabase.storage.from('guest-photos').upload(fileName, blob, { contentType: 'image/jpeg' });
-        if (data) {
-          const { data: urlData } = supabase.storage.from('guest-photos').getPublicUrl(data.path);
-          uploadedUrl = urlData.publicUrl;
-        }
-      }
-      const { error } = await supabase.from('guest_book').insert({
-        tenant_id: tenant.id, name: form.name, institution: form.institution,
-        purpose: form.purpose, phone: form.phone, photo_url: uploadedUrl,
-      } as any);
-      if (error) throw error;
+      // Upload foto dulu — photo_url WAJIB berasal dari endpoint upload
+      // (URL lain ditolak 400 oleh server). JPEG maks 2 MB.
+      const blob = await (await fetch(photoUrl)).blob();
+      const file = new File([blob], `guest-${Date.now()}.jpg`, { type: 'image/jpeg' });
+      const { photo_url } = await guestBookQueries.uploadPhoto(tenantSlug, file);
+
+      await guestBookQueries.create(tenantSlug, {
+        name: form.name, institution: form.institution,
+        purpose: form.purpose, phone: form.phone, photo_url,
+      });
       setIsSuccess(true);
       setTimeout(() => {
         setForm({ name: '', institution: '', purpose: '', phone: '' });
@@ -134,7 +126,12 @@ export default function GuestBookForm() {
         setSelectedChip(''); setFiltered([]);
       }, 3000);
     } catch (e: any) {
-      alert(e.message ?? 'Terjadi kesalahan.');
+      // Rate limit guest book 5/menit/IP
+      alert(
+        e instanceof ApiError && e.statusCode === 429
+          ? 'Terlalu banyak pengisian. Mohon tunggu sebentar lalu coba lagi.'
+          : e.message ?? 'Terjadi kesalahan.'
+      );
     } finally { setIsSubmitting(false); }
   };
 

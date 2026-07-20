@@ -3,8 +3,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useTenant } from '@/hooks/use-tenant';
-import { createClient } from '@/lib/supabase/client';
-import type { Queue, QueueEntry } from '@/lib/types/queue';
+import { publicQueries } from '@/lib/api/queries';
+import { ApiError } from '@/lib/api/client';
+import type { Queue } from '@/lib/types/queue';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import ServiceCard from './service-card';
@@ -21,10 +22,13 @@ export default function ServiceList() {
 
   const fetchQueues = useCallback(async () => {
     if (!tenant) return;
-    const supabase = createClient();
-    const { data } = await supabase.rpc('get_public_queues', { p_tenant_slug: tenantSlug });
-    if (data) setQueues(data as Queue[]);
-    setQueuesLoading(false);
+    try {
+      setQueues((await publicQueries.getQueues(tenantSlug)) as Queue[]);
+    } catch {
+      // biarkan kosong — UI menampilkan "Belum ada layanan aktif"
+    } finally {
+      setQueuesLoading(false);
+    }
   }, [tenant, tenantSlug]);
 
   useEffect(() => { fetchQueues(); }, [fetchQueues]);
@@ -33,16 +37,16 @@ export default function ServiceList() {
     if (!tenant || isGenerating) return;
     setIsGenerating(true);
     try {
-      const supabase = createClient();
-      const { data: entry, error } = await supabase.rpc('create_public_queue_entry', {
-        p_tenant_slug: tenantSlug,
-        p_queue_id: queue.id,
-      });
-
-      if (error || !entry) throw new Error('Gagal membuat tiket');
-      router.push(`/${tenantSlug}/queue/ticket/${(entry as QueueEntry).id}`);
+      // Nomor tiket dihitung server (anti-race)
+      const entry = await publicQueries.createEntry(tenantSlug, queue.id);
+      router.push(`/${tenantSlug}/queue/ticket/${entry.id}`);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Terjadi kesalahan. Coba lagi.');
+      // Rate limit ambil tiket 5/menit/IP — jangan retry-loop
+      alert(
+        e instanceof ApiError && e.statusCode === 429
+          ? 'Terlalu banyak pengambilan tiket. Mohon tunggu sebentar lalu coba lagi.'
+          : 'Gagal membuat tiket. Coba lagi.'
+      );
       setIsGenerating(false);
     }
   };

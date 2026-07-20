@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { publicQueries } from '@/lib/api/queries';
 import { useTenant } from '@/hooks/use-tenant';
 import type { QueueEntry, Queue } from '@/lib/types/queue';
 import { QRCodeSVG } from 'qrcode.react';
@@ -23,22 +23,24 @@ export default function TicketCard() {
   const [currentDate, setCurrentDate] = useState('');
   const [currentTime, setCurrentTime] = useState('');
 
-  const supabase = createClient();
-
   const fetchData = useCallback(async () => {
-    // RPC "not found" is one row with every column null (Postgres
-    // FROM-clause call convention), not a JS null — check .id, not truthiness.
-    const { data: entryData } = await supabase.rpc('get_public_queue_entry', { p_entry_id: entryId });
-    if (!entryData?.id) { setLoading(false); return; }
-    setEntry(entryData as QueueEntry);
+    try {
+      // Tidak ketemu = 404 beneran (ApiError), bukan row NULL gaya RPC lama
+      const entryData = (await publicQueries.getEntry(entryId)) as QueueEntry;
+      setEntry(entryData);
 
-    const { data: queueData } = await supabase.rpc('get_public_queue', { p_queue_id: (entryData as QueueEntry).queue_id });
-    if (queueData?.id) setQueue(queueData as Queue);
-
-    const { data: positionAhead } = await supabase.rpc('count_public_queue_position_ahead', { p_entry_id: entryId });
-    setPositionAhead(positionAhead ?? 0);
-    setLoading(false);
-  }, [entryId, supabase]);
+      const [queueData, position] = await Promise.all([
+        publicQueries.getQueue(entryData.queue_id).catch(() => null),
+        publicQueries.getEntryPosition(entryId).catch(() => null),
+      ]);
+      if (queueData) setQueue(queueData as Queue);
+      setPositionAhead(position?.ahead ?? 0);
+    } catch {
+      // entry 404 → biarkan entry null, UI menampilkan "Tiket tidak ditemukan"
+    } finally {
+      setLoading(false);
+    }
+  }, [entryId]);
 
   useEffect(() => {
     fetchData();

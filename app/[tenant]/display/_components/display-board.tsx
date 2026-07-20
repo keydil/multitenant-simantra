@@ -2,9 +2,11 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { publicQueries } from '@/lib/api/queries';
+import { useRealtime } from '@/hooks/use-realtime';
 import { useTenant } from '@/hooks/use-tenant';
-import type { Queue, QueueEntry } from '@/lib/types/queue';
+import type { Queue } from '@/lib/types/queue';
+import type { PublicQueueEntry } from '@/lib/api/types';
 import { motion, AnimatePresence } from 'framer-motion';
 
 function speak(text: string) {
@@ -24,32 +26,29 @@ export default function DisplayBoard() {
   const { tenant } = useTenant(tenantSlug);
 
   const [queues, setQueues] = useState<Queue[]>([]);
-  const [entries, setEntries] = useState<QueueEntry[]>([]);
+  const [entries, setEntries] = useState<PublicQueueEntry[]>([]);
   const [currentTime, setCurrentTime] = useState('');
   const [currentDate, setCurrentDate] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'split'>('grid');
   const prevServingRef = useRef<Set<string>>(new Set());
 
-  const supabase = createClient();
-
   const loadData = useCallback(async () => {
     if (!tenant) return;
-    const { data: qData } = await supabase.rpc('get_public_queues', { p_tenant_slug: tenantSlug });
-    if (qData) setQueues(qData as Queue[]);
+    try {
+      // Endpoint publik: entries TANPA customer_name/notes
+      const [qData, newEntries] = await Promise.all([
+        publicQueries.getQueues(tenantSlug) as Promise<Queue[]>,
+        publicQueries.getEntries(tenantSlug, 'waiting,serving,completed'),
+      ]);
+      setQueues(qData);
 
-    const { data: eData } = await supabase.rpc('get_public_queue_entries', {
-      p_tenant_slug: tenantSlug,
-      p_statuses: ['waiting', 'serving', 'completed'],
-    });
-    if (eData) {
-      const newEntries = eData as QueueEntry[];
       // TTS for newly serving
       const nowServing = new Set(newEntries.filter(e => e.status === 'serving').map(e => e.id));
       nowServing.forEach(id => {
         if (!prevServingRef.current.has(id)) {
           const e = newEntries.find(x => x.id === id);
           if (e) {
-            const q = (qData ?? queues).find((q: Queue) => q.id === e.queue_id);
+            const q = qData.find((q: Queue) => q.id === e.queue_id);
             const loket = e.service_window ?? 1;
             speak(`Nomor antrian ${e.ticket_number}, ${q?.display_name ?? q?.name ?? ''}, silakan menuju loket ${loket}.`);
           }
@@ -57,15 +56,40 @@ export default function DisplayBoard() {
       });
       prevServingRef.current = nowServing;
       setEntries(newEntries);
+    } catch {
+      // gagal memuat — pertahankan tampilan terakhir, coba lagi di tick berikut
     }
-  }, [tenant, tenantSlug, supabase, queues]);
+  }, [tenant, tenantSlug]);
+
+  // WebSocket room tenant_public:{slug}. entry.called men-trigger TTS
+  // langsung; event lain cukup refresh data. prevServingRef ditandai dulu
+  // supaya diff di loadData tidak menyuarakan nomor yang sama dua kali.
+  const wsConnected = useRealtime(
+    tenant ? { type: 'tenant_public', slug: tenantSlug } : null,
+    {
+      'entry.called': (payload) => {
+        const { entry: e, queue: q } = payload as { entry: PublicQueueEntry; queue: Queue | null };
+        if (!prevServingRef.current.has(e.id)) {
+          prevServingRef.current.add(e.id);
+          const loket = e.service_window ?? 1;
+          speak(`Nomor antrian ${e.ticket_number}, ${q?.display_name ?? q?.name ?? ''}, silakan menuju loket ${loket}.`);
+        }
+        loadData();
+      },
+      'entry.created': () => loadData(),
+      'entry.updated': () => loadData(),
+      'queue.updated': () => loadData(),
+    }
+  );
+  const wsConnectedRef = useRef(wsConnected);
+  wsConnectedRef.current = wsConnected;
 
   useEffect(() => {
     loadData();
-    // Polling replaces realtime: Supabase Realtime enforces RLS, and anon
-    // no longer has direct SELECT on queue_entries/queues (see
-    // MIGRATION_AUDIT.md Kritis #2 + scripts/05b-revoke-anon-direct-queue-select.sql).
-    const dataPoll = setInterval(loadData, 3000);
+    // Polling 3s = fallback saat socket disconnect; di-skip saat connected
+    const dataPoll = setInterval(() => {
+      if (!wsConnectedRef.current) loadData();
+    }, 3000);
     const t = setInterval(() => {
       const now = new Date();
       setCurrentTime(now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
