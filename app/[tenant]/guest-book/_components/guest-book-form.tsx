@@ -2,12 +2,16 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { guestBookQueries } from '@/lib/api/queries';
+import { guestBookQueries, visitPurposeQueries } from '@/lib/api/queries';
 import { ApiError } from '@/lib/api/client';
+import { friendlyErrorMessage } from '@/lib/api/errors';
+import { toast } from 'sonner';
 import { useTenant } from '@/hooks/use-tenant';
 import { ArrowLeft, Camera, CheckCircle2, RefreshCw, AlertCircle, Search, Building2, User, Loader2 } from 'lucide-react';
 
-const PURPOSE_OPTIONS = [
+// Fallback KALAU fetch gagal / tenant lama belum punya baris purpose. Kategori
+// "Keperluan Kunjungan" sekarang per-tenant (dari GET /public/.../purposes).
+const DEFAULT_PURPOSES = [
   'Konsultasi Layanan', 'Bertemu Pejabat/Staf', 'Pengaduan', 'Informasi Umum',
   'Keperluan Administratif', 'Lainnya',
 ];
@@ -17,7 +21,18 @@ export default function GuestBookForm() {
   const tenantSlug = params.tenant as string;
   const router = useRouter();
   const { tenant } = useTenant(tenantSlug);
+  const [purposeOptions, setPurposeOptions] = useState<string[]>(DEFAULT_PURPOSES);
   const [form, setForm] = useState({ name: '', institution: '', purpose: '', phone: '' });
+
+  // Ambil kategori keperluan milik tenant ini. Kalau gagal / kosong (tenant
+  // lama belum di-backfill), pertahankan DEFAULT_PURPOSES.
+  useEffect(() => {
+    visitPurposeQueries.getPublic(tenantSlug)
+      .then((rows) => {
+        if (rows.length > 0) setPurposeOptions(rows.map((p) => p.label));
+      })
+      .catch(() => {});
+  }, [tenantSlug]);
   const [isPersonal, setIsPersonal] = useState(false);
   const [selectedChip, setSelectedChip] = useState('');
   const [filtered, setFiltered] = useState<string[]>([]);
@@ -125,13 +140,16 @@ export default function GuestBookForm() {
         setPhotoUrl(null); setIsSuccess(false); setIsPersonal(false);
         setSelectedChip(''); setFiltered([]);
       }, 3000);
-    } catch (e: any) {
+    } catch (e) {
       // Rate limit guest book 5/menit/IP
-      alert(
-        e instanceof ApiError && e.statusCode === 429
-          ? 'Terlalu banyak pengisian. Mohon tunggu sebentar lalu coba lagi.'
-          : e.message ?? 'Terjadi kesalahan.'
-      );
+      const rateLimited = e instanceof ApiError && e.statusCode === 429;
+      toast.error(rateLimited ? 'Terlalu banyak pengisian' : 'Gagal menyimpan buku tamu', {
+        description: rateLimited
+          ? 'Mohon tunggu sebentar, lalu coba lagi.'
+          : friendlyErrorMessage(e),
+        // Perangkat publik sambil berdiri — beri waktu baca lebih lama.
+        duration: 8000,
+      });
     } finally { setIsSubmitting(false); }
   };
 
@@ -278,7 +296,7 @@ export default function GuestBookForm() {
             <div className="space-y-2">
               <label className="text-sm font-semibold text-slate-700">Keperluan Kunjungan <span className="text-red-500">*</span></label>
               <div className="flex flex-wrap gap-2">
-                {PURPOSE_OPTIONS.map(opt => (
+                {purposeOptions.map(opt => (
                   <button key={opt} type="button" onClick={() => handleChip(opt)}
                     className={`px-4 py-2 rounded-full text-sm font-medium border transition-all ${selectedChip === opt ? 'text-white border-transparent' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'}`}
                     style={selectedChip === opt ? { backgroundColor: brand, borderColor: brand } : {}}>

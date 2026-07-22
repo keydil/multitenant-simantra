@@ -20,6 +20,7 @@ export default function AdminGuestBookPage() {
   const sp = useSearchParams();
   const { user } = useAuth();
   const tenantId = user?.tenant_id ?? '';
+  const brandColor = user?.tenant?.brand_color ?? '#1e40af';
 
   const currentPage = Number(sp.get('page') ?? 1);
   const searchQuery = sp.get('search') ?? '';
@@ -73,6 +74,7 @@ export default function AdminGuestBookPage() {
     <GuestBookList
       tenantSlug={tenantSlug}
       tenantId={tenantId}
+      brandColor={brandColor}
       guests={guests}
       currentPage={currentPage}
       totalPages={Math.ceil(totalCount / PAGE_SIZE)}

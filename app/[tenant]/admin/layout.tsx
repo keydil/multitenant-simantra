@@ -6,7 +6,7 @@ import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
 import { publicQueries } from '@/lib/api/queries';
 import {
-  LayoutDashboard, Users, ListOrdered,
+  LayoutDashboard, Users, ListOrdered, ListChecks,
   BookOpen, Settings, LogOut, Menu, X, ChevronRight, Loader2, BarChart3,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -32,6 +32,7 @@ const getNav = (slug: string) => [
     group: 'Manajemen',
     items: [
       { name: 'Kelola Loket', href: `/${slug}/admin/counters`, icon: ListOrdered },
+      { name: 'Kelola Keperluan', href: `/${slug}/admin/visit-purposes`, icon: ListChecks },
       { name: 'Kelola Operator', href: `/${slug}/admin/operators`, icon: Users },
       { name: 'Analitik', href: `/${slug}/admin/analytics`, icon: BarChart3 },
     ],
