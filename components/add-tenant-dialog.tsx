@@ -10,7 +10,9 @@ import { Upload, Check } from 'lucide-react';
 interface AddTenantDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit?: (data: TenantFormData) => void;
+  // Boleh async: dialog menunggu janji ini selesai sebelum menutup diri,
+  // dan tetap terbuka kalau ditolak.
+  onSubmit?: (data: TenantFormData) => void | Promise<void>;
 }
 
 export interface TenantFormData {
@@ -56,49 +58,57 @@ export function AddTenantDialog({ open, onOpenChange, onSubmit }: AddTenantDialo
     }
 
     setIsSubmitting(true);
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 800));
-
-    onSubmit?.(formData);
-    setFormData({ agencyName: '', logo: null, brandColor: '#2563eb' });
-    setLogoPreview(null);
-    setIsSubmitting(false);
-    onOpenChange(false);
+    try {
+      // Dulu: setTimeout 800ms palsu ("Simulate API call") lalu onSubmit
+      // dipanggil TANPA await — spinner "Adding..." menghitung delay bohongan,
+      // dan dialog menutup sebelum POST /tenants yang asli selesai. Sekarang
+      // spinner mengikuti durasi request beneran.
+      await onSubmit?.(formData);
+      setFormData({ agencyName: '', logo: null, brandColor: '#2563eb' });
+      setLogoPreview(null);
+      onOpenChange(false);
+    } catch {
+      // Gagal → dialog sengaja dibiarkan terbuka dengan isian utuh supaya user
+      // bisa langsung coba lagi tanpa mengetik ulang. Pesan errornya sudah
+      // ditampilkan pemanggil lewat toast.
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md border-border">
         <DialogHeader>
-          <DialogTitle className="text-xl font-bold">Add New Tenant</DialogTitle>
+          <DialogTitle className="text-xl font-bold">Tambah Instansi Baru</DialogTitle>
           <DialogDescription>
-            Onboard a new agency to the queue management system
+            Daftarkan instansi baru ke sistem antrian
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Agency Name Field */}
+          {/* Nama Instansi */}
           <div className="space-y-2">
             <Label htmlFor="agency-name" className="text-sm font-semibold text-foreground">
-              Agency Name <span className="text-destructive">*</span>
+              Nama Instansi <span className="text-destructive">*</span>
             </Label>
             <Input
               id="agency-name"
-              placeholder="e.g., Dinas Kesehatan Kota"
+              placeholder="mis. Dinas Kesehatan Kota"
               value={formData.agencyName}
               onChange={handleAgencyNameChange}
               className="border-border bg-background text-foreground placeholder:text-muted-foreground"
               required
             />
             <p className="text-xs text-muted-foreground">
-              The official name of the agency or organization
+              Nama resmi instansi atau organisasi
             </p>
           </div>
 
           {/* Logo Upload Field */}
           <div className="space-y-2">
             <Label className="text-sm font-semibold text-foreground">
-              Upload Logo <span className="text-muted-foreground">(Optional)</span>
+              Unggah Logo <span className="text-muted-foreground">(Opsional)</span>
             </Label>
             <div className="relative">
               <input
@@ -117,18 +127,18 @@ export function AddTenantDialog({ open, onOpenChange, onSubmit }: AddTenantDialo
                     <>
                       <img
                         src={logoPreview}
-                        alt="Logo preview"
+                        alt="Pratinjau logo"
                         className="h-12 w-12 object-contain mb-2"
                       />
-                      <p className="text-xs text-foreground font-semibold">Logo added</p>
+                      <p className="text-xs text-foreground font-semibold">Logo ditambahkan</p>
                     </>
                   ) : (
                     <>
                       <Upload className="h-6 w-6 text-muted-foreground mb-2" />
                       <p className="text-xs text-muted-foreground">
-                        <span className="font-semibold text-foreground">Click to upload</span> or drag and drop
+                        <span className="font-semibold text-foreground">Klik untuk mengunggah</span> atau seret ke sini
                       </p>
-                      <p className="text-xs text-muted-foreground">PNG, JPG, or GIF</p>
+                      <p className="text-xs text-muted-foreground">PNG, JPG, atau GIF</p>
                     </>
                   )}
                 </div>
@@ -139,7 +149,7 @@ export function AddTenantDialog({ open, onOpenChange, onSubmit }: AddTenantDialo
           {/* Brand Color Field */}
           <div className="space-y-2">
             <Label htmlFor="brand-color" className="text-sm font-semibold text-foreground">
-              Brand Color <span className="text-muted-foreground">(Optional)</span>
+              Warna Brand <span className="text-muted-foreground">(Opsional)</span>
             </Label>
             <div className="flex items-center gap-3">
               <div className="relative w-16 h-16 rounded-lg border-2 border-border overflow-hidden">
@@ -160,7 +170,7 @@ export function AddTenantDialog({ open, onOpenChange, onSubmit }: AddTenantDialo
                   placeholder="#2563eb"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Primary brand color for the agency portal
+                  Warna utama untuk portal instansi
                 </p>
               </div>
             </div>
@@ -174,7 +184,7 @@ export function AddTenantDialog({ open, onOpenChange, onSubmit }: AddTenantDialo
               onClick={() => onOpenChange(false)}
               className="flex-1"
             >
-              Cancel
+              Batal
             </Button>
             <Button
               type="submit"
@@ -184,12 +194,12 @@ export function AddTenantDialog({ open, onOpenChange, onSubmit }: AddTenantDialo
               {isSubmitting ? (
                 <>
                   <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-                  Adding...
+                  Menambahkan...
                 </>
               ) : (
                 <>
                   <Check className="h-4 w-4" />
-                  Add Tenant
+                  Tambah Instansi
                 </>
               )}
             </Button>

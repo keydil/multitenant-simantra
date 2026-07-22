@@ -7,15 +7,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Edit2, Trash2, Mail, Shield, Loader2 } from 'lucide-react';
+import { Plus, Edit2, Trash2, Mail, Shield, Loader2, RotateCcw } from 'lucide-react';
 import { useTenants, useTenantUsers } from '@/hooks/use-tenant-data';
 import { tenantUserQueries } from '@/lib/api/queries';
+import type { TenantUser } from '@/lib/api/types';
+import { friendlyErrorMessage } from '@/lib/api/errors';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import { toast } from 'sonner';
 
 export default function UserManagementPage() {
   const { tenants, loading: tenantsLoading } = useTenants();
   const [selectedTenantId, setSelectedTenantId] = useState<string>('');
-  const { users, loading: usersLoading } = useTenantUsers(selectedTenantId);
+  const { users, loading: usersLoading, setUsers } = useTenantUsers(selectedTenantId);
+  const confirm = useConfirm();
   const [isOpen, setIsOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -67,22 +71,47 @@ export default function UserManagementPage() {
       setSelectedTenantId('');
       setTimeout(() => setSelectedTenantId(prev), 50);
     } catch (error: any) {
-      toast.error(`Gagal menyimpan: ${error.message || 'Unknown error'}`);
+      toast.error('Gagal menyimpan', { description: friendlyErrorMessage(error) });
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDelete = async (userId: string) => {
-    if (!confirm('Yakin mau nonaktifkan pengguna ini?')) return;
+    const ok = await confirm({
+      title: 'Nonaktifkan pengguna ini?',
+      description: 'Akunnya langsung tidak bisa dipakai masuk, dan sesi yang sedang aktif ikut diputus.',
+      confirmText: 'Nonaktifkan',
+      variant: 'destructive',
+    });
+    if (!ok) return;
     try {
       await tenantUserQueries.update(userId, { is_active: false });
+      // Dulu memakai trik `setSelectedTenantId('')` + setTimeout untuk memaksa
+      // hook memuat ulang — seluruh daftar berkedip kosong dulu. Hook ini sudah
+      // mengekspos setUsers, jadi cukup ubah baris yang bersangkutan.
+      setUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, is_active: false } : u))
+      );
       toast.success('Pengguna berhasil dinonaktifkan');
-      const prev = selectedTenantId;
-      setSelectedTenantId('');
-      setTimeout(() => setSelectedTenantId(prev), 50);
-    } catch (error: any) {
-      toast.error(`Gagal menghapus: ${error.message}`);
+    } catch (error) {
+      toast.error('Gagal menonaktifkan', { description: friendlyErrorMessage(error) });
+    }
+  };
+
+  // E1: jalan pulang. Tanpa konfirmasi — mengaktifkan kembali itu aksi yang
+  // membangun, dan kalau salah tinggal dinonaktifkan lagi.
+  const handleReactivate = async (user: TenantUser) => {
+    try {
+      await tenantUserQueries.update(user.id, { is_active: true });
+      setUsers((prev) =>
+        prev.map((u) => (u.id === user.id ? { ...u, is_active: true } : u))
+      );
+      toast.success('Pengguna diaktifkan kembali', {
+        description: `${user.full_name || user.email} bisa masuk lagi.`,
+      });
+    } catch (error) {
+      toast.error('Gagal mengaktifkan kembali', { description: friendlyErrorMessage(error) });
     }
   };
 
@@ -173,7 +202,14 @@ export default function UserManagementPage() {
                     onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                   >
-                    <option value="viewer">Viewer (Hanya Lihat)</option>
+                    {/* E5: opsi "viewer" DIHAPUS dari sini. Role itu tidak
+                        pernah diimplementasikan — backend tidak punya satupun
+                        @Roles('viewer') (DESIGN.md:103: dipertahankan hanya
+                        demi CHECK constraint Supabase lama), dan signInTenant
+                        tidak mengarahkannya ke halaman manapun. Akun viewer
+                        berhasil login lalu terjebak diam di layar login.
+                        Tipe 'viewer' sengaja DIPERTAHANKAN di types.ts &
+                        auth-context.tsx supaya baris lama di DB tetap terbaca. */}
                     <option value="operator">Operator (Kelola Antrian)</option>
                     <option value="admin">Admin (Akses Penuh)</option>
                     <option value="superadmin">Superadmin (Admin Sistem)</option>
@@ -260,12 +296,21 @@ export default function UserManagementPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => handleOpenDialog(user)} className="h-8 w-8 p-0 hover:bg-slate-100 rounded-lg">
+                          <Button variant="ghost" size="sm" onClick={() => handleOpenDialog(user)} className="h-8 w-8 p-0 hover:bg-slate-100 rounded-lg" title="Edit pengguna">
                             <Edit2 className="w-3.5 h-3.5 text-slate-400" />
                           </Button>
-                          <Button variant="ghost" size="sm" onClick={() => handleDelete(user.id)} className="h-8 w-8 p-0 hover:bg-red-50 rounded-lg">
-                            <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                          </Button>
+                          {/* E1: pengguna nonaktif dulu buntu — badge "Nonaktif"
+                              tampil, tapi tak ada satupun cara mengaktifkannya
+                              lagi (dialog edit hanya berisi nama & role). */}
+                          {user.is_active ? (
+                            <Button variant="ghost" size="sm" onClick={() => handleDelete(user.id)} className="h-8 w-8 p-0 hover:bg-red-50 rounded-lg" title="Nonaktifkan pengguna">
+                              <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                            </Button>
+                          ) : (
+                            <Button variant="ghost" size="sm" onClick={() => handleReactivate(user)} className="h-8 w-8 p-0 hover:bg-emerald-50 rounded-lg" title="Aktifkan kembali">
+                              <RotateCcw className="w-3.5 h-3.5 text-emerald-500" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>

@@ -116,16 +116,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         { auth: false }
       );
 
+      const destination =
+        result.user.role === 'admin'
+          ? `/${tenantSlug}/admin`
+          : result.user.role === 'operator'
+            ? `/${tenantSlug}/operator`
+            : result.user.role === 'superadmin'
+              ? '/dashboard'
+              : null;
+
+      // E5: dulu rantai if/else ini tidak punya cabang penutup. Role yang tidak
+      // dikenal — terutama `viewer`, yang ditawarkan di form "Tambah Pengguna"
+      // tapi tidak pernah diimplementasikan (0 @Roles('viewer') di backend) —
+      // membuat login BERHASIL (token terbit, sesi aktif) lalu halaman diam
+      // membeku di layar login tanpa pesan apa pun. Sekarang sesinya ditutup
+      // lagi dan user diberi tahu alasannya.
+      if (!destination) {
+        setAccessToken(result.access_token);
+        await api.post('/auth/logout', undefined, { auth: false }).catch(() => {});
+        setAccessToken(null);
+        throw new Error(
+          `Akun Anda punya role "${result.user.role}" yang belum memiliki halaman kerja di aplikasi ini. Hubungi superadmin untuk mengubah role akun Anda.`
+        );
+      }
+
       setAccessToken(result.access_token);
       setUser(result.user);
-
-      if (result.user.role === 'admin') {
-        window.location.href = `/${tenantSlug}/admin`;
-      } else if (result.user.role === 'operator') {
-        window.location.href = `/${tenantSlug}/operator`;
-      } else if (result.user.role === 'superadmin') {
-        window.location.href = '/dashboard';
-      }
+      window.location.href = destination;
     } catch (err) {
       const message = err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Login gagal';
       setError(message);

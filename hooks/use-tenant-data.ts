@@ -16,7 +16,13 @@ import type {
   TenantUser,
 } from '@/lib/api/types';
 
-export const useTenants = () => {
+/**
+ * `includeInactive` wajib dikirim halaman Manajemen Instansi (E1/E3). Tanpa itu
+ * `getAll()` menempel `?is_active=true`, sehingga instansi yang dinonaktifkan
+ * lenyap dari dashboard dan tidak ada lagi jalan untuk mengaktifkannya kembali.
+ */
+export const useTenants = (opts?: { includeInactive?: boolean }) => {
+  const includeInactive = opts?.includeInactive ?? false;
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -24,7 +30,7 @@ export const useTenants = () => {
   useEffect(() => {
     const fetchTenants = async () => {
       try {
-        setTenants(await tenantQueries.getAll());
+        setTenants(await tenantQueries.getAll({ includeInactive }));
       } catch (err) {
         setError(err as Error);
       } finally {
@@ -33,7 +39,7 @@ export const useTenants = () => {
     };
 
     fetchTenants();
-  }, []);
+  }, [includeInactive]);
 
   return { tenants, loading, error, setTenants };
 };
