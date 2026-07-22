@@ -2,15 +2,16 @@ import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { AuthProvider } from '@/lib/auth/auth-context'
+import { ConfirmProvider } from '@/components/ui/confirm-dialog'
+import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
 const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'Superadmin Dashboard - Queue Management System',
-  description: 'Enterprise-grade superadmin dashboard for multi-tenant SaaS queue system',
-  generator: 'v0.app',
+  title: 'SIMANTRA — Sistem Manajemen Antrian',
+  description: 'Sistem antrian digital multi-instansi untuk pelayanan publik.',
   icons: {
     icon: [
       {
@@ -36,11 +37,14 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className="bg-background">
+    <html lang="id" className="bg-background">
       <body className="font-sans antialiased">
         <AuthProvider>
-          {children}
+          <ConfirmProvider>
+            {children}
+          </ConfirmProvider>
         </AuthProvider>
+        <Toaster position="bottom-right" closeButton />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
