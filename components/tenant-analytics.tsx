@@ -28,7 +28,10 @@ export function TenantAnalytics({ tenantId }: TenantAnalyticsProps) {
   const chartData = analytics.slice(0, 14).map((a) => ({
     date: new Date(a.date).toLocaleDateString('id-ID', { month: 'short', day: 'numeric' }),
     completed: a.completed_entries,
-    waiting: a.total_entries - a.completed_entries,
+    // "total - selesai" = tiket yang TIDAK selesai (no_show + cancelled +
+    // tak terlayani). Bukan "menunggu" — ini data hari yang sudah lewat, tidak
+    // ada lagi yang mengantri. Label lama "Menunggu" menyesatkan.
+    unfinished: a.total_entries - a.completed_entries,
     avgTime: Math.round(a.average_service_time_minutes || 0),
   }));
 
@@ -66,7 +69,7 @@ export function TenantAnalytics({ tenantId }: TenantAnalyticsProps) {
           {
             label: 'Selesai (30h)',
             value: totalCompleted,
-            sub: `${totalEntries > 0 ? Math.round((totalCompleted / totalEntries) * 100) : 0}% completion rate`,
+            sub: `${totalEntries > 0 ? Math.round((totalCompleted / totalEntries) * 100) : 0}% tingkat penyelesaian`,
             icon: <Users className="w-4 h-4 text-emerald-600" />,
             iconBg: 'bg-emerald-50',
           },
@@ -114,7 +117,7 @@ export function TenantAnalytics({ tenantId }: TenantAnalyticsProps) {
                 <Tooltip contentStyle={tooltipStyle} cursor={{ fill: '#f8fafc' }} />
                 <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
                 <Bar dataKey="completed" fill="#10B981" name="Selesai" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="waiting" fill="#F59E0B" name="Menunggu" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="unfinished" fill="#F59E0B" name="Tidak selesai" radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>

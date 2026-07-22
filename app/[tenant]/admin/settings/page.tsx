@@ -2,9 +2,10 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import { tenantQueries, themeQueries } from '@/lib/api/queries';
+import { themeQueries } from '@/lib/api/queries';
+import { friendlyErrorMessage } from '@/lib/api/errors';
 import { useTenant } from '@/hooks/use-tenant';
-import { Loader2, Save, Palette, Building2, Globe } from 'lucide-react';
+import { Loader2, Save, Palette, Building2, Globe, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function AdminSettingsPage() {
@@ -13,8 +14,13 @@ export default function AdminSettingsPage() {
   const { tenant, loading: tenantLoading } = useTenant(tenantSlug);
 
   const [isSaving, setIsSaving] = useState(false);
-  // Skema tenant tidak punya kolom alamat/telepon — field lama "address"
-  // (yang tak pernah tersimpan) diganti "description" yang beneran ada
+  // D1: kartu "Profil Instansi" HANYA-BACA untuk admin. Field-field ini
+  // (name/description/brand_color/logo_url) disimpan lewat PATCH /tenants/:id
+  // yang sengaja @Roles('superadmin') (DESIGN.md:171) — bukan bug backend.
+  // Dulu form-nya editable + tombol "Simpan Profil" yang selalu 403. Sekarang
+  // ditampilkan sebagai informasi read-only; `form` cuma untuk menampilkan
+  // nilai dari server, tidak lagi disubmit. Theme & logo upload (endpoint
+  // terpisah yang mengizinkan admin) tidak terpengaruh.
   const [form, setForm] = useState({
     name: '',
     description: '',
@@ -51,32 +57,16 @@ export default function AdminSettingsPage() {
       .catch(() => {});
   }, [tenant]);
 
-  const handleSaveProfile = async () => {
-    if (!tenant) return;
-    setIsSaving(true);
-    try {
-      await tenantQueries.update(tenant.id, {
-        name: form.name,
-        description: form.description || null,
-        brand_color: form.brand_color,
-        logo_url: form.logo_url || null,
-      } as any);
-      toast.success('Profil instansi berhasil diperbarui');
-    } catch (err: any) {
-      toast.error(`Gagal menyimpan: ${err.message}`);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const handleSaveTheme = async () => {
     if (!tenant) return;
     setIsSaving(true);
     try {
       await themeQueries.update(tenant.id, themeForm);
       toast.success('Theme berhasil diperbarui');
-    } catch (err: any) {
-      toast.error(`Gagal menyimpan theme: ${err.message}`);
+    } catch (err) {
+      toast.error('Gagal menyimpan theme', {
+        description: friendlyErrorMessage(err),
+      });
     } finally {
       setIsSaving(false);
     }
@@ -119,17 +109,19 @@ export default function AdminSettingsPage() {
             <label className="text-xs font-medium text-slate-600 mb-1 block">Nama Instansi</label>
             <input
               value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+              readOnly
+              disabled
+              className="w-full px-3.5 py-2.5 text-sm bg-slate-100 border border-slate-200 rounded-lg text-slate-500 cursor-not-allowed"
             />
           </div>
           <div>
             <label className="text-xs font-medium text-slate-600 mb-1 block">Deskripsi</label>
             <textarea
               value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              readOnly
+              disabled
               rows={2}
-              className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-900 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+              className="w-full px-3.5 py-2.5 text-sm bg-slate-100 border border-slate-200 rounded-lg text-slate-500 resize-none cursor-not-allowed"
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -139,13 +131,14 @@ export default function AdminSettingsPage() {
                 <input
                   type="color"
                   value={form.brand_color}
-                  onChange={(e) => setForm({ ...form, brand_color: e.target.value })}
-                  className="w-12 h-9 p-1 border border-slate-200 rounded-lg cursor-pointer"
+                  disabled
+                  className="w-12 h-9 p-1 border border-slate-200 rounded-lg cursor-not-allowed opacity-60"
                 />
                 <input
                   value={form.brand_color}
-                  onChange={(e) => setForm({ ...form, brand_color: e.target.value })}
-                  className="flex-1 px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg font-mono text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  readOnly
+                  disabled
+                  className="flex-1 px-3 py-2 text-sm bg-slate-100 border border-slate-200 rounded-lg font-mono text-slate-500 cursor-not-allowed"
                 />
               </div>
             </div>
@@ -153,9 +146,10 @@ export default function AdminSettingsPage() {
               <label className="text-xs font-medium text-slate-600 mb-1 block">URL Logo</label>
               <input
                 value={form.logo_url}
-                onChange={(e) => setForm({ ...form, logo_url: e.target.value })}
-                placeholder="https://..."
-                className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                readOnly
+                disabled
+                placeholder="—"
+                className="w-full px-3.5 py-2.5 text-sm bg-slate-100 border border-slate-200 rounded-lg text-slate-500 placeholder-slate-400 cursor-not-allowed"
               />
             </div>
           </div>
@@ -174,16 +168,14 @@ export default function AdminSettingsPage() {
             </div>
           </div>
 
-          <div className="flex justify-end">
-            <button
-              onClick={handleSaveProfile}
-              disabled={isSaving}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-white disabled:opacity-60"
-              style={{ background: brand }}
-            >
-              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Simpan Profil
-            </button>
+          {/* D1: nota read-only — menggantikan tombol "Simpan Profil" yang
+              dulu selalu 403 untuk admin. */}
+          <div className="flex items-start gap-2 bg-slate-50 border border-slate-100 rounded-lg px-3.5 py-3">
+            <Lock className="w-3.5 h-3.5 text-slate-400 mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Profil instansi hanya dapat diubah oleh superadmin. Hubungi superadmin untuk
+              perubahan nama, deskripsi, atau subdomain instansi.
+            </p>
           </div>
         </div>
       </div>
