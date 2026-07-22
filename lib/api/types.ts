@@ -17,6 +17,14 @@ export interface Tenant {
   theme?: TenantTheme | null;
 }
 
+/** Ringkasan data yang akan ikut hancur saat instansi dihapus permanen. */
+export interface TenantPurgePreview {
+  users: number;
+  queues: number;
+  entries: number;
+  guest_book_entries: number;
+}
+
 export interface TenantUser {
   id: string;
   tenant_id: string | null;
@@ -132,6 +140,17 @@ export interface GuestBook {
   phone: string;
   photo_url: string | null;
   created_at: string;
+}
+
+/** Kategori "Keperluan Kunjungan" per-tenant (opsi chip buku tamu). */
+export interface VisitPurpose {
+  id: string;
+  tenant_id: string;
+  label: string;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 /** Respons GET /queues/:queueId/stats/today. */

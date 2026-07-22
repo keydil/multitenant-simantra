@@ -15,8 +15,10 @@ import type {
   QueueStatsToday,
   QueueStatusSummary,
   Tenant,
+  TenantPurgePreview,
   TenantTheme,
   TenantUser,
+  VisitPurpose,
 } from './types';
 
 // ============================================================================
@@ -34,7 +36,21 @@ export const tenantQueries = {
   update: (id: string, updates: Partial<Tenant>) =>
     api.patch<Tenant>(`/tenants/${id}`, updates),
 
+  /** Soft delete — `is_active=false`, bisa diaktifkan lagi. */
   delete: (id: string) => api.delete<void>(`/tenants/${id}`),
+
+  /** Data yang akan ikut hancur kalau instansi dihapus permanen. */
+  purgePreview: (id: string) =>
+    api.get<TenantPurgePreview>(`/tenants/${id}/purge-preview`),
+
+  /**
+   * HARD DELETE — tidak bisa dibatalkan, seluruh riwayat instansi ikut hilang.
+   * Server menolak (400) kalau instansinya masih aktif.
+   */
+  purge: (id: string) =>
+    api.delete<{ id: string; deleted: boolean; files_removed: number }>(
+      `/tenants/${id}/permanent`
+    ),
 
   uploadLogo: (tenantId: string, file: File) => {
     const form = new FormData();
@@ -131,6 +147,32 @@ export const analyticsQueries = {
 
   getQueueAnalytics: (queueId: string, days = 30) =>
     api.get<AnalyticsDaily[]>(`/queues/${queueId}/analytics?days=${days}`),
+
+  /**
+   * Backfill agregasi N hari terakhir (superadmin). Cron backend hanya mengisi
+   * "kemarin" tiap 00:15, jadi data historis & environment yang cron-nya belum
+   * pernah nyala butuh trigger manual ini. Idempoten.
+   */
+  aggregate: (days: number) =>
+    api.post<{ days: number; upserted: number }>('/analytics/aggregate', { days }),
+};
+
+// ============================================================================
+// SYSTEM (config global — Mode Maintenance)
+// ============================================================================
+export interface MaintenanceStatus {
+  active: boolean;
+  message?: string;
+}
+
+export const systemQueries = {
+  /** Publik — dipanggil halaman kiosk/display/buku-tamu. */
+  getMaintenanceStatus: () =>
+    api.get<MaintenanceStatus>('/system/maintenance-status', { auth: false }),
+
+  /** Superadmin — toggle + pesan custom. */
+  updateMaintenance: (active: boolean, message?: string) =>
+    api.patch<MaintenanceStatus>('/system/maintenance', { active, message }),
 };
 
 // ============================================================================
@@ -233,4 +275,25 @@ export const guestBookQueries = {
       `/tenants/${tenantId}/guest-book${qs ? `?${qs}` : ''}`
     );
   },
+};
+
+// ============================================================================
+// VISIT PURPOSES (Kelola Keperluan Kunjungan — per-tenant)
+// ============================================================================
+export const visitPurposeQueries = {
+  /** Publik — opsi chip form buku tamu (hanya aktif, urut sort_order). */
+  getPublic: (slug: string) =>
+    api.get<VisitPurpose[]>(`/public/tenants/${slug}/guest-book/purposes`, { auth: false }),
+
+  /** Staff — semua baris (termasuk nonaktif) untuk halaman kelola & filter. */
+  getByTenant: (tenantId: string) =>
+    api.get<VisitPurpose[]>(`/tenants/${tenantId}/guest-book/purposes`),
+
+  create: (tenantId: string, label: string, sort_order?: number) =>
+    api.post<VisitPurpose>(`/tenants/${tenantId}/guest-book/purposes`, { label, sort_order }),
+
+  update: (id: string, updates: { label?: string; sort_order?: number; is_active?: boolean }) =>
+    api.patch<VisitPurpose>(`/guest-book/purposes/${id}`, updates),
+
+  delete: (id: string) => api.delete<void>(`/guest-book/purposes/${id}`),
 };
