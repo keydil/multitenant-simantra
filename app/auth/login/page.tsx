@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
-import { Eye, EyeOff, Loader2, AlertCircle, Activity } from 'lucide-react';
+import { Eye, EyeOff, Loader2, AlertCircle, Activity, Clock } from 'lucide-react';
 
 export default function SuperadminLoginPage() {
   const router = useRouter();
@@ -14,6 +14,16 @@ export default function SuperadminLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
+
+  // `?expired=1` dikirim handleSessionExpired() saat user dilempar ke sini
+  // karena sesinya mati. Dibaca dari window (bukan useSearchParams) supaya
+  // halaman ini tidak butuh Suspense boundary saat prerender.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('expired') === '1') {
+      setSessionExpired(true);
+    }
+  }, []);
 
   // Redirect kalau udah login sebagai superadmin
   useEffect(() => {
@@ -65,6 +75,15 @@ export default function SuperadminLoginPage() {
             {/* Form */}
             <div className="px-8 py-6">
               <form onSubmit={handleSubmit} className="space-y-4">
+
+                {sessionExpired && !error && (
+                  <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-100 text-amber-700 px-3.5 py-3 rounded-lg">
+                    <Clock className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <span className="text-xs leading-relaxed">
+                      Sesi Anda telah berakhir karena tidak ada aktivitas. Silakan masuk kembali untuk melanjutkan.
+                    </span>
+                  </div>
+                )}
 
                 {error && (
                   <div className="flex items-start gap-2.5 bg-red-50 border border-red-100 text-red-600 text-sm px-3.5 py-3 rounded-lg">

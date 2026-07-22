@@ -2,6 +2,8 @@
 // BUKAN localStorage — lihat FRONTEND_MIGRATION.md §2) + auto-refresh
 // sekali saat 401 lewat cookie httpOnly `simantra_refresh`.
 
+import { handleSessionExpired } from '@/lib/auth/session-expired';
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL!;
 
 export interface ApiErrorBody {
@@ -82,6 +84,10 @@ export interface ApiFetchOptions extends Omit<RequestInit, 'body'> {
 
 async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
   const { auth = true, headers, body, ...rest } = options;
+  // Dicatat sebelum request: kalau nanti 401 + refresh gagal, ini yang
+  // membedakan "sesi mati" (user tadinya login) dari "panggilan publik tanpa
+  // token" — halaman kiosk tidak boleh ikut dilempar ke layar login.
+  const hadToken = !!accessToken;
   const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
   const serializedBody = body === undefined ? undefined : isFormData ? (body as FormData) : JSON.stringify(body);
 
@@ -107,6 +113,11 @@ async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise
     const refreshed = await refreshSession();
     if (refreshed) {
       res = await doFetch();
+    } else if (hadToken) {
+      // Refresh token ikut ditolak → sesi benar-benar habis. Beri tahu user
+      // dan arahkan ke login; error tetap dilempar supaya call site berhenti
+      // dan tidak menampilkan state "berhasil".
+      handleSessionExpired();
     }
   }
 
