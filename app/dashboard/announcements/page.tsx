@@ -17,12 +17,15 @@ import { Plus, Edit2, Trash2, AlertTriangle, AlertCircle, Zap, Info, Loader2 } f
 import { useTenants, useAnnouncements } from '@/hooks/use-tenant-data';
 import { announcementQueries } from '@/lib/api/queries';
 import { useAuth } from '@/lib/auth/auth-context';
+import { friendlyErrorMessage } from '@/lib/api/errors';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import { toast } from 'sonner';
 
 export default function AnnouncementsPage() {
   const { tenants, loading: tenantsLoading } = useTenants();
   const { announcements, loading: announcementsLoading, setAnnouncements } = useAnnouncements();
   const { user } = useAuth();
+  const confirm = useConfirm();
   const [selectedTenantIds, setSelectedTenantIds] = useState<string[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [editingAnnouncement, setEditingAnnouncement] = useState<any>(null);
@@ -99,20 +102,26 @@ export default function AnnouncementsPage() {
       setIsOpen(false);
     } catch (error: any) {
       console.error('[announcements] Save error:', error);
-      toast.error(`Gagal menyimpan: ${error.message || 'Unknown error'}`);
+      toast.error('Gagal menyimpan', { description: friendlyErrorMessage(error) });
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Yakin mau hapus pengumuman ini?')) return;
+    const ok = await confirm({
+      title: 'Hapus pengumuman ini?',
+      description: 'Pengumuman akan langsung berhenti tampil di semua instansi yang menjadi targetnya.',
+      confirmText: 'Hapus',
+      variant: 'destructive',
+    });
+    if (!ok) return;
     try {
       await announcementQueries.update(id, { is_active: false });
       setAnnouncements((prev: any[]) => prev.filter((a) => a.id !== id));
       toast.success('Pengumuman dihapus');
-    } catch (error: any) {
-      toast.error(`Gagal menghapus: ${error.message}`);
+    } catch (error) {
+      toast.error('Gagal menghapus', { description: friendlyErrorMessage(error) });
     }
   };
 

@@ -3,9 +3,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { tenantUserQueries } from '@/lib/api/queries';
+import { friendlyErrorMessage } from '@/lib/api/errors';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import { useTenant } from '@/hooks/use-tenant';
 import {
-  Plus, Edit2, Trash2, Loader2, Mail, Shield, User,
+  Plus, Edit2, Trash2, Loader2, Mail, Shield, User, RotateCcw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -23,6 +25,7 @@ export default function AdminOperatorsPage() {
   const params = useParams();
   const tenantSlug = params.tenant as string;
   const { tenant, loading: tenantLoading } = useTenant(tenantSlug);
+  const confirm = useConfirm();
 
   const [operators, setOperators] = useState<Operator[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,7 +38,11 @@ export default function AdminOperatorsPage() {
     if (!tenant) return;
     try {
       const data = await tenantUserQueries.getByTenant(tenant.id);
-      setOperators(data.filter(u => u.is_active) as Operator[]);
+      // E1/E2: dulu di sini ada `.filter(u => u.is_active)` — petugas yang
+      // dinonaktifkan langsung raib dari daftar, sehingga admin mengira
+      // akunnya terhapus permanen dan tidak punya cara mengembalikannya.
+      // Sekarang semua ditarik; penyaringan dilakukan di tampilan.
+      setOperators(data as Operator[]);
     } catch {
       // biarkan list terakhir
     } finally {
@@ -91,17 +98,39 @@ export default function AdminOperatorsPage() {
   };
 
   const handleDelete = async (op: Operator) => {
-    if (!confirm(`Nonaktifkan akun "${op.full_name || op.email}"?`)) return;
+    const ok = await confirm({
+      title: `Nonaktifkan akun "${op.full_name || op.email}"?`,
+      description: 'Petugas ini langsung tidak bisa masuk lagi, dan sesinya yang sedang berjalan ikut diputus.',
+      confirmText: 'Nonaktifkan',
+      variant: 'destructive',
+    });
+    if (!ok) return;
     try {
       await tenantUserQueries.update(op.id, { is_active: false });
-      toast.success('Pengguna berhasil dinonaktifkan');
+      toast.success('Petugas berhasil dinonaktifkan', {
+        description: 'Akunnya tetap ada di daftar dan bisa diaktifkan kembali kapan saja.',
+      });
       await fetchOperators();
-    } catch (err: any) {
-      toast.error(`Gagal menghapus: ${err.message}`);
+    } catch (err) {
+      toast.error('Gagal menonaktifkan', { description: friendlyErrorMessage(err) });
+    }
+  };
+
+  // E1: jalan pulang. Tanpa konfirmasi — aksi yang membangun, bukan merusak.
+  const handleReactivate = async (op: Operator) => {
+    try {
+      await tenantUserQueries.update(op.id, { is_active: true });
+      toast.success('Petugas diaktifkan kembali', {
+        description: `${op.full_name || op.email} bisa masuk lagi.`,
+      });
+      await fetchOperators();
+    } catch (err) {
+      toast.error('Gagal mengaktifkan kembali', { description: friendlyErrorMessage(err) });
     }
   };
 
   const brand = tenant?.brand_color ?? '#1e40af';
+  const activeOperators = operators.filter((o) => o.is_active);
 
   const roleBadge = (role: string) => {
     if (role === 'admin') return <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200">Admin</span>;
@@ -137,12 +166,15 @@ export default function AdminOperatorsPage() {
       {/* Summary */}
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-white border border-slate-200 rounded-xl p-4">
-          <p className="text-xs text-slate-400 mb-1">Total Petugas</p>
-          <p className="text-2xl font-bold text-slate-900">{operators.length}</p>
+          <p className="text-xs text-slate-400 mb-1">Petugas Aktif</p>
+          {/* Sengaja hanya menghitung yang aktif: daftar sekarang ikut memuat
+              petugas nonaktif, dan angka ini dipakai untuk menilai kesiapan
+              layanan — bukan berapa baris yang tampil. */}
+          <p className="text-2xl font-bold text-slate-900">{activeOperators.length}</p>
         </div>
         <div className="bg-white border border-slate-200 rounded-xl p-4">
           <p className="text-xs text-slate-400 mb-1">Operator</p>
-          <p className="text-2xl font-bold text-slate-900">{operators.filter(o => o.role === 'operator').length}</p>
+          <p className="text-2xl font-bold text-slate-900">{activeOperators.filter(o => o.role === 'operator').length}</p>
         </div>
       </div>
 
@@ -155,16 +187,23 @@ export default function AdminOperatorsPage() {
       ) : (
         <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100">
           {operators.map((op) => (
-            <div key={op.id} className="flex items-center justify-between px-5 py-4 hover:bg-slate-50/50 transition-colors">
+            <div key={op.id} className={`flex items-center justify-between px-5 py-4 hover:bg-slate-50/50 transition-colors ${op.is_active ? '' : 'opacity-60'}`}>
               <div className="flex items-center gap-3">
                 <div
                   className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-semibold"
-                  style={{ background: brand }}
+                  style={{ background: op.is_active ? brand : '#94a3b8' }}
                 >
                   {(op.full_name || op.email).slice(0, 2).toUpperCase()}
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-slate-800">{op.full_name || '(Tanpa nama)'}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-slate-800">{op.full_name || '(Tanpa nama)'}</p>
+                    {!op.is_active && (
+                      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
+                        Nonaktif
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2 text-xs text-slate-400">
                     <Mail className="w-3 h-3" />
                     {op.email}
@@ -173,12 +212,18 @@ export default function AdminOperatorsPage() {
               </div>
               <div className="flex items-center gap-3">
                 {roleBadge(op.role)}
-                <button onClick={() => openDialog(op)} className="p-2 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
+                <button onClick={() => openDialog(op)} title="Edit petugas" className="p-2 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
                   <Edit2 className="w-3.5 h-3.5" />
                 </button>
-                <button onClick={() => handleDelete(op)} className="p-2 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors">
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                {op.is_active ? (
+                  <button onClick={() => handleDelete(op)} title="Nonaktifkan petugas" className="p-2 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                ) : (
+                  <button onClick={() => handleReactivate(op)} title="Aktifkan kembali" className="p-2 rounded-lg hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition-colors">
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             </div>
           ))}

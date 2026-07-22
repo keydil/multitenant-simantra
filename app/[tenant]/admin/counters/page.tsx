@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { queueQueries } from '@/lib/api/queries';
+import { friendlyErrorMessage } from '@/lib/api/errors';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import { useTenant } from '@/hooks/use-tenant';
 import type { Queue } from '@/lib/types/queue';
 import {
@@ -14,6 +16,7 @@ export default function AdminCountersPage() {
   const params = useParams();
   const tenantSlug = params.tenant as string;
   const { tenant, loading: tenantLoading } = useTenant(tenantSlug);
+  const confirm = useConfirm();
 
   const [queues, setQueues] = useState<Queue[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,13 +88,19 @@ export default function AdminCountersPage() {
   };
 
   const handleDelete = async (queue: Queue) => {
-    if (!confirm(`Hapus loket "${queue.display_name || queue.name}"?`)) return;
+    const ok = await confirm({
+      title: `Hapus loket "${queue.display_name || queue.name}"?`,
+      description: 'Loket berhenti muncul di kiosk dan tidak bisa lagi mengambil tiket baru. Riwayat tiketnya tetap tersimpan.',
+      confirmText: 'Hapus',
+      variant: 'destructive',
+    });
+    if (!ok) return;
     try {
       await queueQueries.update(queue.id, { is_active: false });
       toast.success('Loket berhasil dihapus');
       await fetchQueues();
-    } catch (err: any) {
-      toast.error(`Gagal menghapus: ${err.message}`);
+    } catch (err) {
+      toast.error('Gagal menghapus', { description: friendlyErrorMessage(err) });
     }
   };
 

@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useTenant } from '@/hooks/use-tenant';
 import { publicQueries } from '@/lib/api/queries';
 import { ApiError } from '@/lib/api/client';
+import { toast } from 'sonner';
 import type { Queue } from '@/lib/types/queue';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -42,11 +43,15 @@ export default function ServiceList() {
       router.push(`/${tenantSlug}/queue/ticket/${entry.id}`);
     } catch (e) {
       // Rate limit ambil tiket 5/menit/IP — jangan retry-loop
-      alert(
-        e instanceof ApiError && e.statusCode === 429
-          ? 'Terlalu banyak pengambilan tiket. Mohon tunggu sebentar lalu coba lagi.'
-          : 'Gagal membuat tiket. Coba lagi.'
-      );
+      const rateLimited = e instanceof ApiError && e.statusCode === 429;
+      toast.error(rateLimited ? 'Terlalu banyak pengambilan tiket' : 'Gagal membuat tiket', {
+        description: rateLimited
+          ? 'Mohon tunggu sebentar, lalu coba lagi.'
+          : 'Silakan coba lagi, atau minta bantuan petugas.',
+        // Kiosk dipakai sambil berdiri & sering tidak disentuh lagi — beri
+        // waktu baca lebih lama daripada default sonner (4 detik).
+        duration: 8000,
+      });
       setIsGenerating(false);
     }
   };

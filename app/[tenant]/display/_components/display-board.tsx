@@ -143,8 +143,17 @@ export default function DisplayBoard() {
 
                     {/* Serving */}
                     {servingNow.map(e => (
+                      // BUGFIX: dulu kartu ini TIDAK PERNAH terlihat di mode grid.
+                      // Pembungkusnya `relative` tanpa tinggi, sementara KEDUA
+                      // anaknya `absolute` (border konik + isi) — jadi tidak ada
+                      // yang mengisi tinggi dan kartunya kolaps jadi 0px di dalam
+                      // flex column. Nomor yang sedang dipanggil baru muncul saat
+                      // board berganti ke mode split (yang isinya normal flow).
+                      // Sekarang: isi kartu dikembalikan ke normal flow (`relative`,
+                      // bukan `absolute`) supaya dialah yang menentukan tinggi, dan
+                      // celah 4px untuk border didapat dari padding pembungkus.
                       <motion.div key={e.id} layout
-                        className="relative rounded-xl overflow-hidden shadow-2xl"
+                        className="relative rounded-xl overflow-hidden shadow-2xl p-[4px]"
                         animate={{ scale: [1, 1.02, 1] }}
                         transition={{ duration: 2, repeat: Infinity }}>
                         {/* Magic conic border */}
@@ -153,7 +162,7 @@ export default function DisplayBoard() {
                           transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
                           style={{ background: `conic-gradient(from 0deg, transparent 0deg, ${queue.color_code ?? brand} 90deg, transparent 180deg, ${queue.color_code ?? brand} 270deg, transparent 360deg)` }}
                         />
-                        <div className="absolute inset-[4px] rounded-lg flex flex-col items-center justify-center py-6 text-center"
+                        <div className="relative rounded-lg flex flex-col items-center justify-center py-6 text-center"
                           style={{ backgroundColor: '#0f172a' }}>
                           <p className="text-xs text-slate-400 uppercase tracking-widest mb-1">DIPANGGIL</p>
                           <p className="text-5xl font-black" style={{ color: queue.color_code ?? brand }}>{e.ticket_number}</p>

@@ -5,6 +5,21 @@ import { useParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
 import { queueEntryQueries, tenantUserQueries } from '@/lib/api/queries';
 import { Users, ListOrdered, CheckCircle, Clock, TrendingUp, ArrowUpRight } from 'lucide-react';
+import { useHealth, HEALTH_LABEL } from '@/hooks/use-health';
+
+// B2: warna pil status mengikuti keadaan nyata /health, bukan hijau permanen.
+const HEALTH_PILL: Record<string, string> = {
+  checking: 'text-slate-500 bg-slate-50 border-slate-100',
+  ok: 'text-emerald-600 bg-emerald-50 border-emerald-100',
+  degraded: 'text-amber-600 bg-amber-50 border-amber-100',
+  down: 'text-red-600 bg-red-50 border-red-100',
+};
+const HEALTH_PILL_DOT: Record<string, string> = {
+  checking: 'bg-slate-300',
+  ok: 'bg-emerald-500',
+  degraded: 'bg-amber-500',
+  down: 'bg-red-500',
+};
 
 interface Stats {
   totalWaiting: number;
@@ -16,6 +31,7 @@ interface Stats {
 export default function AdminDashboardPage() {
   const params = useParams();
   const { user } = useAuth();
+  const health = useHealth();
   const tenantSlug = params.tenant as string;
   const [stats, setStats] = useState<Stats>({ totalWaiting: 0, totalServing: 0, totalCompleted: 0, totalOperators: 0 });
   const [loading, setLoading] = useState(true);
@@ -117,9 +133,9 @@ export default function AdminDashboardPage() {
           </h1>
           <p className="text-sm text-slate-400 mt-0.5">{today}</p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-emerald-600 bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-full">
-          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          Sistem aktif
+        <div className={`flex items-center gap-2 text-xs border px-3 py-1.5 rounded-full ${HEALTH_PILL[health]}`}>
+          <div className={`w-1.5 h-1.5 rounded-full ${HEALTH_PILL_DOT[health]} ${health === 'checking' ? 'animate-pulse' : ''}`} />
+          {HEALTH_LABEL[health]}
         </div>
       </div>
 

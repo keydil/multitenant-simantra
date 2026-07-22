@@ -12,12 +12,15 @@ import { Plus, Edit2, Trash2, Clock, Loader2 } from 'lucide-react';
 import { useTenants } from '@/hooks/use-tenant-data';
 import { useQueues } from '@/hooks/use-queue-data';
 import { queueQueries } from '@/lib/api/queries';
+import { friendlyErrorMessage } from '@/lib/api/errors';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import { toast } from 'sonner';
 
 export default function QueueManagementPage() {
   const { tenants, loading: tenantsLoading } = useTenants();
   const [selectedTenantId, setSelectedTenantId] = useState<string>('');
   const { queues, loading: queuesLoading } = useQueues(selectedTenantId);
+  const confirm = useConfirm();
   const [isOpen, setIsOpen] = useState(false);
   const [editingQueue, setEditingQueue] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -72,22 +75,28 @@ export default function QueueManagementPage() {
       setSelectedTenantId('');
       setTimeout(() => setSelectedTenantId(prev), 50);
     } catch (error: any) {
-      toast.error(`Gagal menyimpan: ${error.message || 'Unknown error'}`);
+      toast.error('Gagal menyimpan', { description: friendlyErrorMessage(error) });
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDelete = async (queueId: string) => {
-    if (!confirm('Yakin mau hapus antrian ini?')) return;
+    const ok = await confirm({
+      title: 'Hapus antrian ini?',
+      description: 'Antrian dinonaktifkan dan tidak lagi muncul di kiosk. Riwayat tiketnya tetap tersimpan.',
+      confirmText: 'Hapus',
+      variant: 'destructive',
+    });
+    if (!ok) return;
     try {
       await queueQueries.update(queueId, { is_active: false });
       toast.success('Antrian berhasil dihapus');
       const prev = selectedTenantId;
       setSelectedTenantId('');
       setTimeout(() => setSelectedTenantId(prev), 50);
-    } catch (error: any) {
-      toast.error(`Gagal menghapus: ${error.message}`);
+    } catch (error) {
+      toast.error('Gagal menghapus', { description: friendlyErrorMessage(error) });
     }
   };
 

@@ -18,6 +18,7 @@ import {
   Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useHealth, HEALTH_LABEL, HEALTH_DOT } from '@/hooks/use-health';
 import { useAuth } from '@/lib/auth/auth-context';
 
 const navigation = [
@@ -48,6 +49,7 @@ const navigation = [
 
 export function DashboardSidebar() {
   const pathname = usePathname();
+  const health = useHealth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { user, signOut } = useAuth();
 
@@ -111,8 +113,14 @@ export function DashboardSidebar() {
       {/* User info + Logout */}
       <div className="px-3 py-3 border-t border-slate-200 space-y-1">
         <div className="flex items-center gap-2 px-3 py-1.5">
-          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-          <span className="text-[11px] text-slate-400">Semua sistem normal</span>
+          <div
+            className={cn(
+              'w-1.5 h-1.5 rounded-full',
+              HEALTH_DOT[health],
+              health === 'checking' && 'animate-pulse',
+            )}
+          />
+          <span className="text-[11px] text-slate-400">{HEALTH_LABEL[health]}</span>
         </div>
 
         <div className="flex items-center gap-3 px-3 py-2 rounded-md">

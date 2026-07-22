@@ -1,14 +1,17 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { queueQueries, queueEntryQueries } from '@/lib/api/queries';
 import { ApiError } from '@/lib/api/client';
+import { friendlyErrorMessage } from '@/lib/api/errors';
+import { useConfirm } from '@/components/ui/confirm-dialog';
+import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth/auth-context';
 import { useRealtime } from '@/hooks/use-realtime';
 import { useTenant } from '@/hooks/use-tenant';
 import type { Queue, QueueEntry } from '@/lib/types/queue';
-import { Loader2, ArrowLeft } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import StatsBar from './stats-bar';
 import ServingCard from './serving-card';
 import WaitingList from './waiting-list';
@@ -30,8 +33,8 @@ function speak(text: string) {
 export default function OperatorPanel() {
   const params = useParams();
   const tenantSlug = params.tenant as string;
-  const router = useRouter();
   const { tenant, loading: tenantLoading } = useTenant(tenantSlug);
+  const confirm = useConfirm();
 
   const [queues, setQueues] = useState<Queue[]>([]);
   const [selectedQueueId, setSelectedQueueId] = useState<string>('');
@@ -133,7 +136,7 @@ export default function OperatorPanel() {
         await loadData();
       } else {
         console.error(e);
-        alert('Gagal memanggil antrian. Coba lagi.');
+        toast.error('Gagal memanggil antrian', { description: friendlyErrorMessage(e) });
       }
     }
     setIsLoading(false);
@@ -155,7 +158,7 @@ export default function OperatorPanel() {
       await loadData();
     } catch (e) {
       console.error(e);
-      alert('Gagal memperbarui status antrian.');
+      toast.error('Gagal memperbarui status antrian', { description: friendlyErrorMessage(e) });
       await loadData();
     }
     setIsLoading(false);
@@ -163,42 +166,44 @@ export default function OperatorPanel() {
 
   const handleComplete = () => updateStatus('completed');
 
-  const handleHold = () => {
+  const handleHold = async () => {
     if (!currentEntry || isLoading) return;
-    if (!confirm('Tandai tidak hadir? (Antrian tidak bisa dipanggil ulang — pengunjung harus ambil nomor baru)')) return;
+    const ok = await confirm({
+      title: `Tandai nomor ${currentEntry.ticket_number} tidak hadir?`,
+      description:
+        'Status ini final — antrian tidak bisa dipanggil ulang. Kalau pengunjungnya datang belakangan, dia harus ambil nomor baru.',
+      confirmText: 'Tandai tidak hadir',
+      variant: 'destructive',
+    });
+    if (!ok) return;
     updateStatus('no_show');
   };
 
-  const handleCancel = () => {
+  const handleCancel = async () => {
     if (!currentEntry || isLoading) return;
-    if (!confirm('Batalkan antrian ini secara permanen?')) return;
+    const ok = await confirm({
+      title: `Batalkan nomor ${currentEntry.ticket_number}?`,
+      description: 'Antrian dibatalkan permanen dan tidak bisa dikembalikan.',
+      confirmText: 'Batalkan antrian',
+      variant: 'destructive',
+    });
+    if (!ok) return;
     updateStatus('cancelled');
   };
 
   const brand = tenant?.brand_color ?? '#1e40af';
 
   if (tenantLoading) {
-    return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-slate-400" size={36} /></div>;
+    return <div className="flex items-center justify-center h-64"><Loader2 className="animate-spin text-slate-400" size={36} /></div>;
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50">
-      {/* Header */}
-      <header className="bg-white border-b border-slate-200 shadow-sm">
-        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center gap-4">
-          <button onClick={() => router.push(`/${tenantSlug}/admin`)}
-            className="p-2 rounded-lg hover:bg-slate-100 text-slate-500">
-            <ArrowLeft size={20} />
-          </button>
-          {tenant?.logo_url && <img src={tenant.logo_url} alt={tenant.name} className="h-9 w-auto object-contain" />}
-          <div>
-            <h1 className="text-lg font-bold" style={{ color: brand }}>PANEL OPERATOR</h1>
-            <p className="text-xs text-slate-400">{tenant?.name}</p>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-4xl mx-auto px-6 py-8 space-y-6">
+    // Konten menyatu di dalam shell operator (operator/layout.tsx sudah
+    // menyediakan topbar ber-brand + nama instansi + bell + logout, plus
+    // container max-w-4xl). Dulu di sini ada min-h-screen + gradient + header
+    // KEDUA (dengan tombol "back ke /admin" yang salah — operator bukan admin,
+    // layout menendang admin keluar dari sini) → dua header bertumpuk.
+    <div className="space-y-6">
         {/* Queue + Window selector */}
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -263,7 +268,6 @@ export default function OperatorPanel() {
 
         {/* Waiting list */}
         <WaitingList entries={waitingEntries} brand={brand} />
-      </main>
     </div>
   );
 }
