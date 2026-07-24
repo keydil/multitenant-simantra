@@ -57,6 +57,16 @@ export const tenantQueries = {
     form.append('file', file);
     return api.post<{ logo_url: string }>(`/tenants/${tenantId}/logo`, form);
   },
+
+  /** E7: upload video signage (MP4/WebM, maks 50 MB — divalidasi backend). */
+  uploadVideo: (tenantId: string, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.post<{ video_url: string }>(`/tenants/${tenantId}/video`, form);
+  },
+
+  removeVideo: (tenantId: string) =>
+    api.delete<{ video_url: null }>(`/tenants/${tenantId}/video`),
 };
 
 // ============================================================================
@@ -183,6 +193,10 @@ export const themeQueries = {
 
   update: (tenantId: string, updates: Partial<TenantTheme>) =>
     api.patch<TenantTheme>(`/tenants/${tenantId}/theme`, updates),
+
+  /** Teks berjalan display (admin-managed). Kirim "" untuk mengosongkan. */
+  updateRunningText: (tenantId: string, running_text: string) =>
+    api.patch<TenantTheme>(`/tenants/${tenantId}/running-text`, { running_text }),
 };
 
 // ============================================================================

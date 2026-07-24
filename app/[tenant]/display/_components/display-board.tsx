@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { publicQueries } from '@/lib/api/queries';
 import { useRealtime } from '@/hooks/use-realtime';
-import { useTenant } from '@/hooks/use-tenant';
+import type { Tenant } from '@/lib/types/tenant';
 import type { Queue } from '@/lib/types/queue';
 import type { PublicQueueEntry } from '@/lib/api/types';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -23,8 +23,11 @@ function speak(text: string) {
 export default function DisplayBoard() {
   const params = useParams();
   const tenantSlug = params.tenant as string;
-  const { tenant } = useTenant(tenantSlug);
 
+  // Tenant + theme ikut siklus polling (bukan fetch-sekali) supaya perubahan
+  // video_url/running_text/logo/brand langsung tampil tanpa reload manual —
+  // konsisten dengan strategi realtime data antrian.
+  const [tenant, setTenant] = useState<Tenant | null>(null);
   const [queues, setQueues] = useState<Queue[]>([]);
   const [entries, setEntries] = useState<PublicQueueEntry[]>([]);
   const [currentTime, setCurrentTime] = useState('');
@@ -32,8 +35,23 @@ export default function DisplayBoard() {
   const [viewMode, setViewMode] = useState<'grid' | 'split'>('grid');
   const prevServingRef = useRef<Set<string>>(new Set());
 
+  // Theme (video_url/running_text/logo/brand) = config admin, TIDAK punya event
+  // WS dan tidak ikut aktivitas antrian. Karena itu di-poll sendiri dengan
+  // interval tetap yang SELALU jalan (lihat useEffect) — beda dari loadData
+  // yang digerakkan event WS + fallback 3s hanya saat WS putus. Menempelkan
+  // theme ke loadData bikin ia stale saat WS sehat & antrian idle.
+  const loadTenant = useCallback(async () => {
+    if (!tenantSlug) return;
+    try {
+      const tenantData = (await publicQueries.getTenant(tenantSlug)) as Tenant;
+      setTenant(tenantData);
+    } catch {
+      // gagal — pertahankan tenant terakhir, coba lagi tick berikut
+    }
+  }, [tenantSlug]);
+
   const loadData = useCallback(async () => {
-    if (!tenant) return;
+    if (!tenantSlug) return;
     try {
       // Endpoint publik: entries TANPA customer_name/notes
       const [qData, newEntries] = await Promise.all([
@@ -59,7 +77,7 @@ export default function DisplayBoard() {
     } catch {
       // gagal memuat — pertahankan tampilan terakhir, coba lagi di tick berikut
     }
-  }, [tenant, tenantSlug]);
+  }, [tenantSlug]);
 
   // WebSocket room tenant_public:{slug}. entry.called men-trigger TTS
   // langsung; event lain cukup refresh data. prevServingRef ditandai dulu
@@ -85,8 +103,13 @@ export default function DisplayBoard() {
   wsConnectedRef.current = wsConnected;
 
   useEffect(() => {
+    loadTenant();
     loadData();
-    // Polling 3s = fallback saat socket disconnect; di-skip saat connected
+    // Theme di-poll SENDIRI tiap 5s dan SELALU (tak peduli WS), karena tak ada
+    // event WS untuk perubahan video/running text. Refetch tenant tidak memicu
+    // reconnect WS: useRealtime nge-key ke nilai join, bukan identitas objek.
+    const themePoll = setInterval(loadTenant, 5000);
+    // Polling data antrian 3s = fallback saat socket disconnect; skip saat connected
     const dataPoll = setInterval(() => {
       if (!wsConnectedRef.current) loadData();
     }, 3000);
@@ -96,13 +119,33 @@ export default function DisplayBoard() {
       setCurrentDate(now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }));
     }, 1000);
     const switchView = setInterval(() => setViewMode(v => v === 'grid' ? 'split' : 'grid'), 20000);
-    return () => { clearInterval(dataPoll); clearInterval(t); clearInterval(switchView); };
-  }, [loadData]);
+    return () => { clearInterval(themePoll); clearInterval(dataPoll); clearInterval(t); clearInterval(switchView); };
+  }, [loadData, loadTenant]);
 
   const brand = tenant?.brand_color ?? '#1e40af';
+  // E7: video signage dari theme instansi (endpoint publik menyertakan theme).
+  // Ada → area besar diisi video + strip antrian ringkas. Kosong → fallback ke
+  // layout nomor antrian grid/split seperti biasa.
+  const videoUrl = tenant?.theme?.video_url ?? null;
+  // Teks berjalan admin-managed; fallback ke default kalau belum diisi.
+  const runningText =
+    tenant?.theme?.running_text?.trim() || 'MELAYANI DENGAN SEPENUH HATI • BUDAYAKAN ANTRE';
 
   const serving = entries.filter(e => e.status === 'serving');
   const entriesByQueue = (qId: string) => entries.filter(e => e.queue_id === qId);
+
+  // Isi marquee dipakai dua tempat: strip fixed (mode split) & strip in-flow
+  // di bawah video (mode video). Didefinisikan sekali supaya tidak dobel.
+  const marquee = (
+    <motion.p
+      initial={{ x: '100vw' }}
+      animate={{ x: '-100%' }}
+      transition={{ duration: 30, repeat: Infinity, ease: 'linear' }}
+      className="whitespace-nowrap text-white font-black text-xl uppercase tracking-widest"
+    >
+      SELAMAT DATANG DI {tenant?.name?.toUpperCase() ?? 'SIMANTRA'} &nbsp;•&nbsp; {runningText} &nbsp;•&nbsp;
+    </motion.p>
+  );
 
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col font-sans overflow-hidden text-white">
@@ -123,8 +166,47 @@ export default function DisplayBoard() {
         </div>
       </header>
 
-      {/* Main */}
+      {/* Main — E7: video besar + strip antrian kalau video di-set; kalau
+          tidak, kembali ke grid/split nomor antrian. */}
       <main className="flex-grow p-8 overflow-hidden">
+        {videoUrl ? (
+          <div className="flex flex-col gap-4 h-full">
+            <div className="grid grid-cols-12 gap-6 flex-grow min-h-0">
+            <div className="col-span-9 rounded-2xl overflow-hidden bg-black flex items-center justify-center">
+              <video src={videoUrl} autoPlay muted loop playsInline className="w-full h-full object-contain" />
+            </div>
+            <div className="col-span-3 flex flex-col gap-3 overflow-y-auto">
+              {queues.map(queue => {
+                const qEntries = entriesByQueue(queue.id);
+                const servingNow = qEntries.find(e => e.status === 'serving');
+                const waitingCount = qEntries.filter(e => e.status === 'waiting').length;
+                return (
+                  <div key={queue.id} className="rounded-2xl bg-slate-800 border border-slate-700 p-4 flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-xl flex items-center justify-center text-white font-black flex-shrink-0"
+                      style={{ backgroundColor: queue.color_code ?? brand }}>
+                      {queue.service_code ?? queue.name.charAt(0)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-slate-400 truncate">{queue.display_name ?? queue.name}</p>
+                      <p className="font-black text-2xl">{servingNow ? servingNow.ticket_number : '---'}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xl font-black text-slate-300">{waitingCount}</p>
+                      <p className="text-[10px] text-slate-500">menunggu</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            </div>
+            {/* Running text — ruang tetap di bawah (video digeser ke atas) */}
+            <div className="h-14 rounded-xl bg-red-600 flex items-center overflow-hidden flex-shrink-0 relative">
+              <div className="w-full h-[2px] bg-white/50 absolute top-0" />
+              {marquee}
+              <div className="w-full h-[2px] bg-white/50 absolute bottom-0" />
+            </div>
+          </div>
+        ) : (
         <AnimatePresence mode="wait">
           {viewMode === 'grid' ? (
             <motion.div key="grid" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -244,23 +326,16 @@ export default function DisplayBoard() {
             </motion.div>
           )}
         </AnimatePresence>
+        )}
       </main>
 
       {/* Running text (split view) */}
       <AnimatePresence>
-        {viewMode === 'split' && (
+        {viewMode === 'split' && !videoUrl && (
           <motion.div initial={{ y: 80 }} animate={{ y: 0 }} exit={{ y: 80 }}
             className="fixed bottom-0 left-0 w-full h-14 bg-red-600 flex items-center overflow-hidden z-50">
             <div className="w-full h-[2px] bg-white/50 absolute top-0" />
-            <motion.p
-              initial={{ x: '100vw' }}
-              animate={{ x: '-100%' }}
-              transition={{ duration: 30, repeat: Infinity, ease: 'linear' }}
-              className="whitespace-nowrap text-white font-black text-xl uppercase tracking-widest"
-            >
-              SELAMAT DATANG DI {tenant?.name?.toUpperCase() ?? 'SIMANTRA'} &nbsp;•&nbsp;
-              MELAYANI DENGAN SEPENUH HATI &nbsp;•&nbsp; BUDAYAKAN ANTRE &nbsp;•&nbsp;
-            </motion.p>
+            {marquee}
             <div className="w-full h-[2px] bg-white/50 absolute bottom-0" />
           </motion.div>
         )}

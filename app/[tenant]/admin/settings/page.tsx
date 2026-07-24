@@ -1,15 +1,28 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { themeQueries } from '@/lib/api/queries';
+import { themeQueries, tenantQueries } from '@/lib/api/queries';
+import { friendlyErrorMessage } from '@/lib/api/errors';
 import { useTenant } from '@/hooks/use-tenant';
-import { Loader2, Palette, Building2, Globe, Lock } from 'lucide-react';
+import { Loader2, Palette, Building2, Globe, Lock, MonitorPlay, Upload, Trash2, Type, Save } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function AdminSettingsPage() {
   const params = useParams();
   const tenantSlug = params.tenant as string;
   const { tenant, loading: tenantLoading } = useTenant(tenantSlug);
+
+  // E7: video signage instansi = self-manage admin (beda dari theme/logo yang
+  // dikunci superadmin). Upload lewat POST /tenants/:id/video (diskStorage,
+  // maks 50 MB, MP4/WebM). videoUrl null → display pakai layout nomor antrian.
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoBusy, setVideoBusy] = useState(false);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+
+  // Teks berjalan display, self-manage admin. Kosong → display pakai default.
+  const [runningText, setRunningText] = useState('');
+  const [runningTextBusy, setRunningTextBusy] = useState(false);
 
   // D1 + reversal B1: kartu "Profil Instansi" DAN "Theme & White-labeling"
   // sama-sama HANYA-BACA untuk admin. Profil (name/description/brand_color/
@@ -49,9 +62,61 @@ export default function AdminSettingsPage() {
           text_color: data.text_color || '#1F2937',
           background_color: data.background_color || '#FFFFFF',
         });
+        setVideoUrl(data.video_url ?? null);
+        setRunningText(data.running_text ?? '');
       })
       .catch(() => {});
   }, [tenant]);
+
+  const handleSaveRunningText = async () => {
+    if (!tenant) return;
+    setRunningTextBusy(true);
+    try {
+      await themeQueries.updateRunningText(tenant.id, runningText);
+      toast.success('Teks berjalan disimpan');
+    } catch (err) {
+      toast.error('Gagal menyimpan teks berjalan', { description: friendlyErrorMessage(err) });
+    } finally {
+      setRunningTextBusy(false);
+    }
+  };
+
+  const handleVideoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // reset supaya pilih file sama lagi tetap memicu onChange
+    if (!file || !tenant) return;
+
+    // Guard ukuran di klien = UX cepat; backend tetap penjaga sebenarnya (50 MB).
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error('Video terlalu besar', { description: 'Maksimal 50 MB.' });
+      return;
+    }
+
+    setVideoBusy(true);
+    try {
+      const { video_url } = await tenantQueries.uploadVideo(tenant.id, file);
+      setVideoUrl(video_url);
+      toast.success('Video display berhasil diunggah');
+    } catch (err) {
+      toast.error('Gagal mengunggah video', { description: friendlyErrorMessage(err) });
+    } finally {
+      setVideoBusy(false);
+    }
+  };
+
+  const handleRemoveVideo = async () => {
+    if (!tenant) return;
+    setVideoBusy(true);
+    try {
+      await tenantQueries.removeVideo(tenant.id);
+      setVideoUrl(null);
+      toast.success('Video display dihapus');
+    } catch (err) {
+      toast.error('Gagal menghapus video', { description: friendlyErrorMessage(err) });
+    } finally {
+      setVideoBusy(false);
+    }
+  };
 
   if (tenantLoading) {
     return (
@@ -203,6 +268,108 @@ export default function AdminSettingsPage() {
               Theme dan logo instansi hanya dapat diubah oleh superadmin. Hubungi superadmin
               untuk perubahan warna atau logo instansi.
             </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Video Display (E7) — self-manage admin */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+          <MonitorPlay className="w-4 h-4 text-slate-500" />
+          <h2 className="text-sm font-semibold text-slate-800">Video Layar Tunggu</h2>
+        </div>
+        <div className="p-5 space-y-4">
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Video yang diputar di layar TV ruang tunggu (<span className="font-mono">/{tenantSlug}/display</span>).
+            Diputar berulang tanpa suara. Jika kosong, layar menampilkan nomor antrian seperti biasa.
+            Format MP4 atau WebM, maksimal 50 MB.
+          </p>
+
+          {videoUrl ? (
+            <div className="space-y-3">
+              <video
+                src={videoUrl}
+                controls
+                muted
+                className="w-full max-h-72 rounded-lg bg-slate-900"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => videoInputRef.current?.click()}
+                  disabled={videoBusy}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-60"
+                >
+                  {videoBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  Ganti Video
+                </button>
+                <button
+                  onClick={handleRemoveVideo}
+                  disabled={videoBusy}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Hapus
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => videoInputRef.current?.click()}
+              disabled={videoBusy}
+              className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-200 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors disabled:opacity-60"
+            >
+              {videoBusy ? (
+                <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+              ) : (
+                <>
+                  <Upload className="w-6 h-6 text-slate-400 mb-2" />
+                  <span className="text-xs text-slate-600 font-semibold">Klik untuk mengunggah video</span>
+                  <span className="text-xs text-slate-400">MP4 / WebM, maks 50 MB</span>
+                </>
+              )}
+            </button>
+          )}
+
+          <input
+            ref={videoInputRef}
+            type="file"
+            accept="video/mp4,video/webm"
+            onChange={handleVideoChange}
+            className="hidden"
+          />
+        </div>
+      </div>
+
+      {/* Teks Berjalan (running text) — self-manage admin */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+          <Type className="w-4 h-4 text-slate-500" />
+          <h2 className="text-sm font-semibold text-slate-800">Teks Berjalan</h2>
+        </div>
+        <div className="p-5 space-y-3">
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Teks yang berjalan di bagian bawah layar TV ruang tunggu. Pisahkan poin dengan
+            tanda titik tengah (•). Jika dikosongkan, layar memakai teks default.
+          </p>
+          <textarea
+            value={runningText}
+            onChange={(e) => setRunningText(e.target.value)}
+            rows={2}
+            maxLength={500}
+            placeholder="MELAYANI DENGAN SEPENUH HATI • BUDAYAKAN ANTRE"
+            className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-700 placeholder-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          />
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-slate-400">{runningText.length}/500</span>
+            <button
+              onClick={handleSaveRunningText}
+              disabled={runningTextBusy}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-white disabled:opacity-60"
+              style={{ background: tenant?.brand_color ?? '#1e40af' }}
+            >
+              {runningTextBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Simpan Teks
+            </button>
           </div>
         </div>
       </div>

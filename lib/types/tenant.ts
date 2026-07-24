@@ -10,6 +10,9 @@ export interface Tenant {
   description?: string | null;
   created_at?: string;
   updated_at?: string;
+  // Disertakan oleh GET /public/tenants/:slug (include theme). Display board
+  // publik membaca theme.video_url dari sini (E7).
+  theme?: TenantTheme | null;
 }
 
 export interface TenantTheme {
@@ -21,5 +24,7 @@ export interface TenantTheme {
   text_color: string;
   background_color: string;
   logo_url: string | null;
+  video_url: string | null;
+  running_text: string | null;
   is_custom_theme: boolean;
 }
