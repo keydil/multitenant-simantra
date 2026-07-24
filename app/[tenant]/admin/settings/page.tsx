@@ -1,26 +1,22 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { themeQueries } from '@/lib/api/queries';
-import { friendlyErrorMessage } from '@/lib/api/errors';
 import { useTenant } from '@/hooks/use-tenant';
-import { Loader2, Save, Palette, Building2, Globe, Lock } from 'lucide-react';
-import { toast } from 'sonner';
+import { Loader2, Palette, Building2, Globe, Lock } from 'lucide-react';
 
 export default function AdminSettingsPage() {
   const params = useParams();
   const tenantSlug = params.tenant as string;
   const { tenant, loading: tenantLoading } = useTenant(tenantSlug);
 
-  const [isSaving, setIsSaving] = useState(false);
-  // D1: kartu "Profil Instansi" HANYA-BACA untuk admin. Field-field ini
-  // (name/description/brand_color/logo_url) disimpan lewat PATCH /tenants/:id
-  // yang sengaja @Roles('superadmin') (DESIGN.md:171) — bukan bug backend.
-  // Dulu form-nya editable + tombol "Simpan Profil" yang selalu 403. Sekarang
-  // ditampilkan sebagai informasi read-only; `form` cuma untuk menampilkan
-  // nilai dari server, tidak lagi disubmit. Theme & logo upload (endpoint
-  // terpisah yang mengizinkan admin) tidak terpengaruh.
+  // D1 + reversal B1: kartu "Profil Instansi" DAN "Theme & White-labeling"
+  // sama-sama HANYA-BACA untuk admin. Profil (name/description/brand_color/
+  // logo_url) lewat PATCH /tenants/:id, dan kini theme (warna) lewat PATCH
+  // /tenants/:id/theme juga @Roles('superadmin') — brand = identitas instansi,
+  // dipegang superadmin. Kedua `form`/`themeForm` cuma untuk menampilkan nilai
+  // dari server, tidak lagi disubmit.
   const [form, setForm] = useState({
     name: '',
     description: '',
@@ -56,23 +52,6 @@ export default function AdminSettingsPage() {
       })
       .catch(() => {});
   }, [tenant]);
-
-  const handleSaveTheme = async () => {
-    if (!tenant) return;
-    setIsSaving(true);
-    try {
-      await themeQueries.update(tenant.id, themeForm);
-      toast.success('Theme berhasil diperbarui');
-    } catch (err) {
-      toast.error('Gagal menyimpan theme', {
-        description: friendlyErrorMessage(err),
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const brand = tenant?.brand_color ?? '#1e40af';
 
   if (tenantLoading) {
     return (
@@ -195,13 +174,14 @@ export default function AdminSettingsPage() {
                   <input
                     type="color"
                     value={themeForm[key]}
-                    onChange={(e) => setThemeForm({ ...themeForm, [key]: e.target.value })}
-                    className="w-12 h-9 p-1 border border-slate-200 rounded-lg cursor-pointer"
+                    disabled
+                    className="w-12 h-9 p-1 border border-slate-200 rounded-lg cursor-not-allowed opacity-60"
                   />
                   <input
                     value={themeForm[key]}
-                    onChange={(e) => setThemeForm({ ...themeForm, [key]: e.target.value })}
-                    className="flex-1 px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg font-mono text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    readOnly
+                    disabled
+                    className="flex-1 px-3 py-2 text-sm bg-slate-100 border border-slate-200 rounded-lg font-mono text-slate-500 cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -215,16 +195,14 @@ export default function AdminSettingsPage() {
             ))}
           </div>
 
-          <div className="flex justify-end">
-            <button
-              onClick={handleSaveTheme}
-              disabled={isSaving}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-white disabled:opacity-60"
-              style={{ background: brand }}
-            >
-              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Simpan Theme
-            </button>
+          {/* Reversal B1: nota read-only — menggantikan tombol "Simpan Theme".
+              Theme & logo brand dikunci superadmin, sejajar Profil Instansi. */}
+          <div className="flex items-start gap-2 bg-slate-50 border border-slate-100 rounded-lg px-3.5 py-3">
+            <Lock className="w-3.5 h-3.5 text-slate-400 mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Theme dan logo instansi hanya dapat diubah oleh superadmin. Hubungi superadmin
+              untuk perubahan warna atau logo instansi.
+            </p>
           </div>
         </div>
       </div>
