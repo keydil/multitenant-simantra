@@ -136,6 +136,12 @@ export default function DisplayBoard() {
 
   // Isi marquee dipakai dua tempat: strip fixed (mode split) & strip in-flow
   // di bawah video (mode video). Didefinisikan sekali supaya tidak dobel.
+  //
+  // Scroll <motion.p> STABIL (tak di-key) supaya pergantian teks TIDAK mereset
+  // scroll ke awal. Hanya <span> running text yang dibungkus AnimatePresence
+  // (key={runningText}) → cuma bagian yang berubah yang slide-up+fade, greeting
+  // & pemisah tetap diam. inline-block supaya translateY jalan tanpa merusak
+  // baris. Poll 5s nilai sama → key sama → tidak re-trigger.
   const marquee = (
     <motion.p
       initial={{ x: '100vw' }}
@@ -143,7 +149,20 @@ export default function DisplayBoard() {
       transition={{ duration: 30, repeat: Infinity, ease: 'linear' }}
       className="whitespace-nowrap text-white font-black text-xl uppercase tracking-widest"
     >
-      SELAMAT DATANG DI {tenant?.name?.toUpperCase() ?? 'SIMANTRA'} &nbsp;•&nbsp; {runningText} &nbsp;•&nbsp;
+      SELAMAT DATANG DI {tenant?.name?.toUpperCase() ?? 'SIMANTRA'} &nbsp;•&nbsp;{' '}
+      <AnimatePresence mode="wait">
+        <motion.span
+          key={runningText}
+          initial={{ y: 18, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: -18, opacity: 0 }}
+          transition={{ duration: 0.35, ease: 'easeOut' }}
+          className="inline-block"
+        >
+          {runningText}
+        </motion.span>
+      </AnimatePresence>
+      {' '}&nbsp;•&nbsp;
     </motion.p>
   );
 
@@ -169,13 +188,41 @@ export default function DisplayBoard() {
       {/* Main — E7: video besar + strip antrian kalau video di-set; kalau
           tidak, kembali ke grid/split nomor antrian. */}
       <main className="flex-grow p-8 overflow-hidden">
+        {/* key by presence (video/queue): fade+scale cuma jalan saat mode
+            benar-benar bertukar, bukan tiap poll 5s (videoUrl sama → key sama). */}
+        <AnimatePresence mode="wait">
         {videoUrl ? (
-          <div className="flex flex-col gap-4 h-full">
-            <div className="grid grid-cols-12 gap-6 flex-grow min-h-0">
-            <div className="col-span-9 rounded-2xl overflow-hidden bg-black flex items-center justify-center">
-              <video src={videoUrl} autoPlay muted loop playsInline className="w-full h-full object-contain" />
+          <motion.div key="video"
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.98 }}
+            transition={{ duration: 0.4, ease: 'easeOut' }}
+            className="flex flex-col gap-4 h-full justify-center">
+            {/* Area video dipatok rasio 16:9 (aspect-video, kaya YouTube).
+                justify-center di flex-col membagi sisa ruang atas-bawah rata
+                supaya blok video tidak menggantung di atas. */}
+            <div className="grid grid-cols-12 gap-6">
+            <div className="col-span-8 aspect-video rounded-2xl overflow-hidden bg-black relative">
+              {/* key by videoUrl: ganti video → crossfade (old fade-out & new
+                  fade-in overlap), tanpa membongkar sidebar/strip di sekitarnya.
+                  object-cover: penuhi area tanpa bar hitam (tepi ter-crop tipis). */}
+              <AnimatePresence>
+                <motion.video
+                  key={videoUrl}
+                  src={videoUrl}
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.4, ease: 'easeOut' }}
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
+              </AnimatePresence>
             </div>
-            <div className="col-span-3 flex flex-col gap-3 overflow-y-auto">
+            <div className="col-span-4 flex flex-col gap-3 overflow-y-auto">
               {queues.map(queue => {
                 const qEntries = entriesByQueue(queue.id);
                 const servingNow = qEntries.find(e => e.status === 'serving');
@@ -205,9 +252,15 @@ export default function DisplayBoard() {
               {marquee}
               <div className="w-full h-[2px] bg-white/50 absolute bottom-0" />
             </div>
-          </div>
+          </motion.div>
         ) : (
-        <AnimatePresence mode="wait">
+          <motion.div key="queue"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4, ease: 'easeOut' }}
+            className="h-full">
+          <AnimatePresence mode="wait">
           {viewMode === 'grid' ? (
             <motion.div key="grid" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="grid gap-6 h-full" style={{ gridTemplateColumns: `repeat(${Math.min(queues.length, 4)}, 1fr)` }}>
@@ -326,7 +379,9 @@ export default function DisplayBoard() {
             </motion.div>
           )}
         </AnimatePresence>
+          </motion.div>
         )}
+        </AnimatePresence>
       </main>
 
       {/* Running text (split view) */}
