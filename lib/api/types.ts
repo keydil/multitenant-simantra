@@ -116,6 +116,9 @@ export interface TenantTheme {
   logo_url: string | null;
   favicon_url: string | null;
   video_url: string | null;
+  image_url: string | null;
+  queue_view_seconds: number;
+  media_view_seconds: number;
   running_text: string | null;
   custom_css: string | null;
   is_custom_theme: boolean;

@@ -33,6 +33,8 @@ export default function DisplayBoard() {
   const [currentTime, setCurrentTime] = useState('');
   const [currentDate, setCurrentDate] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'split'>('grid');
+  // Rotasi display: bergantian fase antrian ↔ media (kalau media di-set).
+  const [phase, setPhase] = useState<'queue' | 'media'>('queue');
   const prevServingRef = useRef<Set<string>>(new Set());
 
   // Theme (video_url/running_text/logo/brand) = config admin, TIDAK punya event
@@ -123,13 +125,32 @@ export default function DisplayBoard() {
   }, [loadData, loadTenant]);
 
   const brand = tenant?.brand_color ?? '#1e40af';
-  // E7: video signage dari theme instansi (endpoint publik menyertakan theme).
-  // Ada → area besar diisi video + strip antrian ringkas. Kosong → fallback ke
-  // layout nomor antrian grid/split seperti biasa.
+  // Media Display dari theme instansi (endpoint publik menyertakan theme).
+  // video_url & image_url XOR (backend menjamin). Ada media → fase media
+  // menampilkan video/foto besar; fase antrian menampilkan grid/split.
   const videoUrl = tenant?.theme?.video_url ?? null;
+  const imageUrl = tenant?.theme?.image_url ?? null;
+  const hasMedia = !!(videoUrl || imageUrl);
+  const queueSeconds = tenant?.theme?.queue_view_seconds ?? 20;
+  const mediaSeconds = tenant?.theme?.media_view_seconds ?? 60;
+  // Media tampil hanya saat fase media (dan memang ada media-nya).
+  const showMedia = hasMedia && phase === 'media';
   // Teks berjalan admin-managed; fallback ke default kalau belum diisi.
   const runningText =
     tenant?.theme?.running_text?.trim() || 'MELAYANI DENGAN SEPENUH HATI • BUDAYAKAN ANTRE';
+
+  // Rotasi fase: durasi tiap fase beda, jadi pakai setTimeout yang menjadwalkan
+  // ulang tiap kali fase berganti (bukan setInterval). Tanpa media → paksa fase
+  // antrian. Deps primitif (angka/bool) → stabil, tak reset tiap poll 5s.
+  useEffect(() => {
+    if (!hasMedia) {
+      setPhase('queue');
+      return;
+    }
+    const seconds = phase === 'queue' ? queueSeconds : mediaSeconds;
+    const t = setTimeout(() => setPhase((p) => (p === 'queue' ? 'media' : 'queue')), seconds * 1000);
+    return () => clearTimeout(t);
+  }, [phase, hasMedia, queueSeconds, mediaSeconds]);
 
   const serving = entries.filter(e => e.status === 'serving');
   const entriesByQueue = (qId: string) => entries.filter(e => e.queue_id === qId);
@@ -185,41 +206,56 @@ export default function DisplayBoard() {
         </div>
       </header>
 
-      {/* Main — E7: video besar + strip antrian kalau video di-set; kalau
-          tidak, kembali ke grid/split nomor antrian. */}
-      <main className="flex-grow p-8 overflow-hidden">
-        {/* key by presence (video/queue): fade+scale cuma jalan saat mode
-            benar-benar bertukar, bukan tiap poll 5s (videoUrl sama → key sama). */}
-        <AnimatePresence mode="wait">
-        {videoUrl ? (
-          <motion.div key="video"
+      {/* Main — fase media (video/foto besar + strip antrian) bergantian dengan
+          fase antrian (grid/split), diatur rotasi durasi admin. */}
+      <main className="relative flex-grow overflow-hidden">
+        {/* key media/queue: fade cuma jalan saat fase bertukar, bukan tiap poll
+            5s (nilai sama → key sama). TANPA mode="wait" + kedua branch absolute
+            inset-0 → media & antrian saling tumpuk saat transisi (crossfade),
+            jadi TIDAK ada momen "antrian doang" di layar besar saat masuk fase
+            media (dulu mode="wait" nahan antrian fade-out dulu baru media masuk). */}
+        <AnimatePresence>
+        {showMedia ? (
+          <motion.div key="media"
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.98 }}
             transition={{ duration: 0.4, ease: 'easeOut' }}
-            className="flex flex-col gap-4 h-full justify-center">
-            {/* Area video dipatok rasio 16:9 (aspect-video, kaya YouTube).
-                justify-center di flex-col membagi sisa ruang atas-bawah rata
-                supaya blok video tidak menggantung di atas. */}
+            className="absolute inset-0 p-8 flex flex-col gap-4 justify-center">
+            {/* Area media dipatok rasio 16:9 (aspect-video, kaya YouTube).
+                justify-center membagi sisa ruang atas-bawah rata. */}
             <div className="grid grid-cols-12 gap-6">
             <div className="col-span-8 aspect-video rounded-2xl overflow-hidden bg-black relative">
-              {/* key by videoUrl: ganti video → crossfade (old fade-out & new
-                  fade-in overlap), tanpa membongkar sidebar/strip di sekitarnya.
-                  object-cover: penuhi area tanpa bar hitam (tepi ter-crop tipis). */}
+              {/* key by url: ganti media → crossfade (old fade-out & new fade-in
+                  overlap), tanpa membongkar sidebar/strip. object-cover: penuhi
+                  area tanpa bar hitam (tepi ter-crop tipis). Video XOR foto. */}
               <AnimatePresence>
-                <motion.video
-                  key={videoUrl}
-                  src={videoUrl}
-                  autoPlay
-                  muted
-                  loop
-                  playsInline
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.4, ease: 'easeOut' }}
-                  className="absolute inset-0 w-full h-full object-cover"
-                />
+                {videoUrl ? (
+                  <motion.video
+                    key={videoUrl}
+                    src={videoUrl}
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.4, ease: 'easeOut' }}
+                    className="absolute inset-0 w-full h-full object-cover"
+                  />
+                ) : (
+                  <motion.img
+                    key={imageUrl}
+                    src={imageUrl ?? undefined}
+                    alt=""
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.4, ease: 'easeOut' }}
+                    className="absolute inset-0 w-full h-full object-cover"
+                  />
+                )}
               </AnimatePresence>
             </div>
             <div className="col-span-4 flex flex-col gap-3 overflow-y-auto">
@@ -259,7 +295,7 @@ export default function DisplayBoard() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.4, ease: 'easeOut' }}
-            className="h-full">
+            className="absolute inset-0 p-8">
           <AnimatePresence mode="wait">
           {viewMode === 'grid' ? (
             <motion.div key="grid" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -384,9 +420,9 @@ export default function DisplayBoard() {
         </AnimatePresence>
       </main>
 
-      {/* Running text (split view) */}
+      {/* Running text (split view, fase antrian) */}
       <AnimatePresence>
-        {viewMode === 'split' && !videoUrl && (
+        {viewMode === 'split' && !showMedia && (
           <motion.div initial={{ y: 80 }} animate={{ y: 0 }} exit={{ y: 80 }}
             className="fixed bottom-0 left-0 w-full h-14 bg-red-600 flex items-center overflow-hidden z-50">
             <div className="w-full h-[2px] bg-white/50 absolute top-0" />

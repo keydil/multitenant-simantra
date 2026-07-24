@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import { themeQueries, tenantQueries } from '@/lib/api/queries';
 import { friendlyErrorMessage } from '@/lib/api/errors';
 import { useTenant } from '@/hooks/use-tenant';
-import { Loader2, Palette, Building2, Globe, Lock, MonitorPlay, Upload, Trash2, Type, Save } from 'lucide-react';
+import { Loader2, Palette, Building2, Globe, Lock, MonitorPlay, Upload, Trash2, Type, Save, Film, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function AdminSettingsPage() {
@@ -13,12 +13,18 @@ export default function AdminSettingsPage() {
   const tenantSlug = params.tenant as string;
   const { tenant, loading: tenantLoading } = useTenant(tenantSlug);
 
-  // E7: video signage instansi = self-manage admin (beda dari theme/logo yang
-  // dikunci superadmin). Upload lewat POST /tenants/:id/video (diskStorage,
-  // maks 50 MB, MP4/WebM). videoUrl null → display pakai layout nomor antrian.
+  // Media Display instansi = self-manage admin. video_url & image_url XOR
+  // (backend menjamin). mediaType cuma pilih uploader mana yang ditampilkan.
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [videoBusy, setVideoBusy] = useState(false);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [mediaType, setMediaType] = useState<'video' | 'image'>('video');
+  const [mediaBusy, setMediaBusy] = useState(false);
   const videoInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
+  // Durasi rotasi display (fase antrian vs media).
+  const [durations, setDurations] = useState({ queue_view_seconds: 20, media_view_seconds: 60 });
+  const [durationsBusy, setDurationsBusy] = useState(false);
 
   // Teks berjalan display, self-manage admin. Kosong → display pakai default.
   const [runningText, setRunningText] = useState('');
@@ -63,6 +69,12 @@ export default function AdminSettingsPage() {
           background_color: data.background_color || '#FFFFFF',
         });
         setVideoUrl(data.video_url ?? null);
+        setImageUrl(data.image_url ?? null);
+        setMediaType(data.image_url ? 'image' : 'video');
+        setDurations({
+          queue_view_seconds: data.queue_view_seconds ?? 20,
+          media_view_seconds: data.media_view_seconds ?? 60,
+        });
         setRunningText(data.running_text ?? '');
       })
       .catch(() => {});
@@ -92,21 +104,22 @@ export default function AdminSettingsPage() {
       return;
     }
 
-    setVideoBusy(true);
+    setMediaBusy(true);
     try {
       const { video_url } = await tenantQueries.uploadVideo(tenant.id, file);
       setVideoUrl(video_url);
+      setImageUrl(null); // XOR: video mengganti foto
       toast.success('Video display berhasil diunggah');
     } catch (err) {
       toast.error('Gagal mengunggah video', { description: friendlyErrorMessage(err) });
     } finally {
-      setVideoBusy(false);
+      setMediaBusy(false);
     }
   };
 
   const handleRemoveVideo = async () => {
     if (!tenant) return;
-    setVideoBusy(true);
+    setMediaBusy(true);
     try {
       await tenantQueries.removeVideo(tenant.id);
       setVideoUrl(null);
@@ -114,7 +127,57 @@ export default function AdminSettingsPage() {
     } catch (err) {
       toast.error('Gagal menghapus video', { description: friendlyErrorMessage(err) });
     } finally {
-      setVideoBusy(false);
+      setMediaBusy(false);
+    }
+  };
+
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !tenant) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Foto terlalu besar', { description: 'Maksimal 2 MB.' });
+      return;
+    }
+
+    setMediaBusy(true);
+    try {
+      const { image_url } = await tenantQueries.uploadImage(tenant.id, file);
+      setImageUrl(image_url);
+      setVideoUrl(null); // XOR: foto mengganti video
+      toast.success('Foto display berhasil diunggah');
+    } catch (err) {
+      toast.error('Gagal mengunggah foto', { description: friendlyErrorMessage(err) });
+    } finally {
+      setMediaBusy(false);
+    }
+  };
+
+  const handleRemoveImage = async () => {
+    if (!tenant) return;
+    setMediaBusy(true);
+    try {
+      await tenantQueries.removeImage(tenant.id);
+      setImageUrl(null);
+      toast.success('Foto display dihapus');
+    } catch (err) {
+      toast.error('Gagal menghapus foto', { description: friendlyErrorMessage(err) });
+    } finally {
+      setMediaBusy(false);
+    }
+  };
+
+  const handleSaveDurations = async () => {
+    if (!tenant) return;
+    setDurationsBusy(true);
+    try {
+      await tenantQueries.updateDisplayConfig(tenant.id, durations);
+      toast.success('Durasi rotasi disimpan');
+    } catch (err) {
+      toast.error('Gagal menyimpan durasi', { description: friendlyErrorMessage(err) });
+    } finally {
+      setDurationsBusy(false);
     }
   };
 
@@ -272,39 +335,93 @@ export default function AdminSettingsPage() {
         </div>
       </div>
 
-      {/* Video Display (E7) — self-manage admin */}
+      {/* Media Display — self-manage admin: video ATAU foto + durasi rotasi */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
           <MonitorPlay className="w-4 h-4 text-slate-500" />
-          <h2 className="text-sm font-semibold text-slate-800">Video Layar Tunggu</h2>
+          <h2 className="text-sm font-semibold text-slate-800">Media Layar Tunggu</h2>
         </div>
         <div className="p-5 space-y-4">
           <p className="text-xs text-slate-500 leading-relaxed">
-            Video yang diputar di layar TV ruang tunggu (<span className="font-mono">/{tenantSlug}/display</span>).
-            Diputar berulang tanpa suara. Jika kosong, layar menampilkan nomor antrian seperti biasa.
-            Format MP4 atau WebM, maksimal 50 MB.
+            Media yang tampil di layar TV ruang tunggu (<span className="font-mono">/{tenantSlug}/display</span>),
+            bergantian dengan tampilan nomor antrian sesuai durasi di bawah. Pilih video atau foto —
+            hanya satu yang aktif (mengganti yang satunya).
           </p>
 
-          {videoUrl ? (
+          {/* Pilih jenis media */}
+          <div className="flex gap-2">
+            {([['video', 'Video', Film], ['image', 'Foto', ImageIcon]] as const).map(([val, label, Icon]) => (
+              <button
+                key={val}
+                onClick={() => setMediaType(val)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                  mediaType === val
+                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Uploader / preview sesuai jenis terpilih */}
+          {mediaType === 'video' ? (
+            videoUrl ? (
+              <div className="space-y-3">
+                <video src={videoUrl} controls muted className="w-full max-h-72 rounded-lg bg-slate-900" />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => videoInputRef.current?.click()}
+                    disabled={mediaBusy}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-60"
+                  >
+                    {mediaBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    Ganti Video
+                  </button>
+                  <button
+                    onClick={handleRemoveVideo}
+                    disabled={mediaBusy}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Hapus
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => videoInputRef.current?.click()}
+                disabled={mediaBusy}
+                className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-200 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors disabled:opacity-60"
+              >
+                {mediaBusy ? (
+                  <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+                ) : (
+                  <>
+                    <Upload className="w-6 h-6 text-slate-400 mb-2" />
+                    <span className="text-xs text-slate-600 font-semibold">Klik untuk mengunggah video</span>
+                    <span className="text-xs text-slate-400">MP4 / WebM, maks 50 MB</span>
+                  </>
+                )}
+              </button>
+            )
+          ) : imageUrl ? (
             <div className="space-y-3">
-              <video
-                src={videoUrl}
-                controls
-                muted
-                className="w-full max-h-72 rounded-lg bg-slate-900"
-              />
+              <img src={imageUrl} alt="Pratinjau media" className="w-full max-h-72 object-contain rounded-lg bg-slate-900" />
               <div className="flex gap-2">
                 <button
-                  onClick={() => videoInputRef.current?.click()}
-                  disabled={videoBusy}
+                  onClick={() => imageInputRef.current?.click()}
+                  disabled={mediaBusy}
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-60"
                 >
-                  {videoBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                  Ganti Video
+                  {mediaBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  Ganti Foto
                 </button>
                 <button
-                  onClick={handleRemoveVideo}
-                  disabled={videoBusy}
+                  onClick={handleRemoveImage}
+                  disabled={mediaBusy}
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -314,29 +431,66 @@ export default function AdminSettingsPage() {
             </div>
           ) : (
             <button
-              onClick={() => videoInputRef.current?.click()}
-              disabled={videoBusy}
+              onClick={() => imageInputRef.current?.click()}
+              disabled={mediaBusy}
               className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-200 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors disabled:opacity-60"
             >
-              {videoBusy ? (
+              {mediaBusy ? (
                 <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
               ) : (
                 <>
                   <Upload className="w-6 h-6 text-slate-400 mb-2" />
-                  <span className="text-xs text-slate-600 font-semibold">Klik untuk mengunggah video</span>
-                  <span className="text-xs text-slate-400">MP4 / WebM, maks 50 MB</span>
+                  <span className="text-xs text-slate-600 font-semibold">Klik untuk mengunggah foto</span>
+                  <span className="text-xs text-slate-400">JPG / PNG / WebP, maks 2 MB</span>
                 </>
               )}
             </button>
           )}
 
-          <input
-            ref={videoInputRef}
-            type="file"
-            accept="video/mp4,video/webm"
-            onChange={handleVideoChange}
-            className="hidden"
-          />
+          <input ref={videoInputRef} type="file" accept="video/mp4,video/webm" onChange={handleVideoChange} className="hidden" />
+          <input ref={imageInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={handleImageChange} className="hidden" />
+
+          {/* Durasi rotasi */}
+          <div className="border-t border-slate-100 pt-4 space-y-3">
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Durasi rotasi (5–600 detik). Layar menampilkan nomor antrian, lalu media, bergantian.
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-medium text-slate-600 mb-1 block">Tampilan antrian (detik)</label>
+                <input
+                  type="number"
+                  min={5}
+                  max={600}
+                  value={durations.queue_view_seconds}
+                  onChange={(e) => setDurations((d) => ({ ...d, queue_view_seconds: Number(e.target.value) }))}
+                  className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-600 mb-1 block">Tampilan media (detik)</label>
+                <input
+                  type="number"
+                  min={5}
+                  max={600}
+                  value={durations.media_view_seconds}
+                  onChange={(e) => setDurations((d) => ({ ...d, media_view_seconds: Number(e.target.value) }))}
+                  className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={handleSaveDurations}
+                disabled={durationsBusy}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-white disabled:opacity-60"
+                style={{ background: tenant?.brand_color ?? '#1e40af' }}
+              >
+                {durationsBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Simpan Durasi
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

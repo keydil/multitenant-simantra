@@ -58,7 +58,7 @@ export const tenantQueries = {
     return api.post<{ logo_url: string }>(`/tenants/${tenantId}/logo`, form);
   },
 
-  /** E7: upload video signage (MP4/WebM, maks 50 MB — divalidasi backend). */
+  /** Media display: upload video signage (MP4/WebM, maks 50 MB). Clear foto. */
   uploadVideo: (tenantId: string, file: File) => {
     const form = new FormData();
     form.append('file', file);
@@ -67,6 +67,22 @@ export const tenantQueries = {
 
   removeVideo: (tenantId: string) =>
     api.delete<{ video_url: null }>(`/tenants/${tenantId}/video`),
+
+  /** Media display: upload foto signage (JPEG/PNG/WebP, maks 2 MB). Clear video. */
+  uploadImage: (tenantId: string, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.post<{ image_url: string }>(`/tenants/${tenantId}/image`, form);
+  },
+
+  removeImage: (tenantId: string) =>
+    api.delete<{ image_url: null }>(`/tenants/${tenantId}/image`),
+
+  /** Durasi rotasi display (detik). Sebagian field boleh. */
+  updateDisplayConfig: (
+    tenantId: string,
+    config: { queue_view_seconds?: number; media_view_seconds?: number },
+  ) => api.patch<TenantTheme>(`/tenants/${tenantId}/display-config`, config),
 };
 
 // ============================================================================
