@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -16,7 +16,7 @@ import {
 import { TenantsTable, Tenant } from '@/components/tenants-table';
 import { AddTenantDialog, TenantFormData } from '@/components/add-tenant-dialog';
 import { DeleteTenantDialog } from '@/components/delete-tenant-dialog';
-import { Palette, Plus } from 'lucide-react';
+import { Palette, Plus, Upload, Loader2, ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTenants, useTenantTheme } from '@/hooks/use-tenant-data';
 import { tenantQueries, themeQueries } from '@/lib/api/queries';
@@ -34,6 +34,12 @@ export default function TenantsPage() {
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
   const [editForm, setEditForm] = useState({ name: '', description: '', brand_color: '#3B82F6' });
   const [isSavingTenant, setIsSavingTenant] = useState(false);
+  // Ganti logo di dialog Edit — menutup gap: dulu logo cuma bisa diunggah saat
+  // Tambah Instansi, tak ada jalan menggantinya. Endpoint POST /tenants/:id/logo
+  // (superadmin-only) sudah ada; ini murni UI.
+  const [editLogoUrl, setEditLogoUrl] = useState<string | null>(null);
+  const [logoBusy, setLogoBusy] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
   // E8: hapus permanen — modal terpisah, dipicu dari menu aksi baris.
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingTenant, setDeletingTenant] = useState<Tenant | null>(null);
@@ -115,7 +121,34 @@ export default function TenantsPage() {
       description: tenant.description ?? '',
       brand_color: tenant.brand_color || '#3B82F6',
     });
+    setEditLogoUrl(tenant.logo_url ?? null);
     setEditDialogOpen(true);
+  };
+
+  const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // reset supaya pilih file sama lagi tetap memicu onChange
+    if (!file || !editingTenant) return;
+
+    // Guard ukuran di klien = UX cepat; backend tetap penjaga sebenarnya (2 MB).
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Logo terlalu besar', { description: 'Maksimal 2 MB.' });
+      return;
+    }
+
+    setLogoBusy(true);
+    try {
+      const { logo_url } = await tenantQueries.uploadLogo(editingTenant.id, file);
+      setEditLogoUrl(logo_url);
+      setTenants((prev) =>
+        prev.map((t) => (t.id === editingTenant.id ? { ...t, logo_url } : t))
+      );
+      toast.success('Logo diperbarui', { description: `Logo ${editingTenant.name} berhasil diganti.` });
+    } catch (err) {
+      toast.error('Gagal mengunggah logo', { description: friendlyErrorMessage(err) });
+    } finally {
+      setLogoBusy(false);
+    }
   };
 
   const handleSaveTenant = async () => {
@@ -401,6 +434,42 @@ export default function TenantsPage() {
                   className="flex-1 border-slate-200 text-sm font-mono"
                 />
               </div>
+            </div>
+
+            {/* Ganti logo — menutup gap: dulu logo hanya bisa diunggah saat
+                Tambah Instansi. Endpoint superadmin-only sudah ada, ini UI-nya. */}
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium text-slate-700">Logo Instansi</Label>
+              <div className="flex items-center gap-3">
+                <div className="w-16 h-16 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden flex-shrink-0">
+                  {editLogoUrl ? (
+                    <img src={editLogoUrl} alt="Logo instansi" className="w-full h-full object-contain" />
+                  ) : (
+                    <ImageIcon className="w-6 h-6 text-slate-300" />
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => logoInputRef.current?.click()}
+                  disabled={logoBusy}
+                  className="text-sm border-slate-200 gap-2"
+                >
+                  {logoBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  {editLogoUrl ? 'Ganti Logo' : 'Unggah Logo'}
+                </Button>
+              </div>
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handleLogoChange}
+                className="hidden"
+              />
+              <p className="text-xs text-slate-400">
+                JPG, PNG, atau WebP. Maks 2 MB. Logo tersimpan otomatis saat dipilih —
+                terpisah dari tombol &ldquo;Simpan Perubahan&rdquo;.
+              </p>
             </div>
 
             {/* Subdomain sengaja dikunci: mengubahnya seketika mematikan SEMUA
