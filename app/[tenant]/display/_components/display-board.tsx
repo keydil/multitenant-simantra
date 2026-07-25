@@ -1,13 +1,23 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import { publicQueries } from '@/lib/api/queries';
 import { useRealtime } from '@/hooks/use-realtime';
 import type { Tenant } from '@/lib/types/tenant';
 import type { Queue } from '@/lib/types/queue';
-import type { PublicQueueEntry } from '@/lib/api/types';
+import type { PublicQueueEntry, Announcement } from '@/lib/api/types';
 import { motion, AnimatePresence } from 'framer-motion';
+import { AlertTriangle, Wrench, Info } from 'lucide-react';
+
+// Gaya banner pengumuman per tipe (warna latar + ikon + label). Statik →
+// didefinisikan di module scope supaya tidak dialokasi ulang tiap render.
+const ANN_STYLE: Record<Announcement['announcement_type'], { bg: string; icon: ReactNode; label: string }> = {
+  maintenance: { bg: '#b91c1c', icon: <Wrench className="w-5 h-5" />, label: 'PEMELIHARAAN' },
+  warning:     { bg: '#b45309', icon: <AlertTriangle className="w-5 h-5" />, label: 'PERHATIAN' },
+  update:      { bg: '#1d4ed8', icon: <Info className="w-5 h-5" />, label: 'INFO' },
+  info:        { bg: '#334155', icon: <Info className="w-5 h-5" />, label: 'INFO' },
+};
 
 function speak(text: string) {
   if (typeof window === 'undefined' || !window.speechSynthesis) return;
@@ -28,6 +38,11 @@ export default function DisplayBoard() {
   // video_url/running_text/logo/brand langsung tampil tanpa reload manual —
   // konsisten dengan strategi realtime data antrian.
   const [tenant, setTenant] = useState<Tenant | null>(null);
+  // Pengumuman superadmin untuk banner berrotasi di bawah header. Sudah
+  // difilter ke subset genting (maintenance/warning) saat fetch — lihat
+  // loadTenant; info/update tak ditampilkan di layar publik.
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [annIndex, setAnnIndex] = useState(0);
   const [queues, setQueues] = useState<Queue[]>([]);
   const [entries, setEntries] = useState<PublicQueueEntry[]>([]);
   const [currentTime, setCurrentTime] = useState('');
@@ -45,10 +60,24 @@ export default function DisplayBoard() {
   const loadTenant = useCallback(async () => {
     if (!tenantSlug) return;
     try {
-      const tenantData = (await publicQueries.getTenant(tenantSlug)) as Tenant;
+      // Tenant (theme) + pengumuman publik ikut siklus lambat yang sama —
+      // dua-duanya config admin/superadmin, bukan data antrian realtime.
+      const [tenantData, anns] = await Promise.all([
+        publicQueries.getTenant(tenantSlug) as Promise<Tenant>,
+        publicQueries.getActiveAnnouncements(tenantSlug),
+      ]);
       setTenant(tenantData);
+      // Public display HANYA menampilkan pengumuman genting bagi pengunjung:
+      // maintenance & warning (sesuai desain listActiveForTenantPublic). Tipe
+      // info/update ditujukan ke admin — sengaja tak muncul di layar publik;
+      // absennya banner saat tak ada hal genting = perilaku benar, bukan bug.
+      setAnnouncements(
+        anns.filter(
+          (a) => a.announcement_type === 'maintenance' || a.announcement_type === 'warning',
+        ),
+      );
     } catch {
-      // gagal — pertahankan tenant terakhir, coba lagi tick berikut
+      // gagal — pertahankan data terakhir, coba lagi tick berikut
     }
   }, [tenantSlug]);
 
@@ -152,8 +181,28 @@ export default function DisplayBoard() {
     return () => clearTimeout(t);
   }, [phase, hasMedia, queueSeconds, mediaSeconds]);
 
+  // Rotasi banner pengumuman tiap 8s bila ada >1. Deps = panjang saja (bukan
+  // array) supaya poll 5s yang mengembalikan isi sama tak me-reset interval.
+  // annIndex bisa menggantung di indeks lama saat daftar menyusut → di-clamp
+  // saat render (lihat currentAnn), jadi aman tanpa reset paksa di sini.
+  useEffect(() => {
+    if (announcements.length <= 1) {
+      setAnnIndex(0);
+      return;
+    }
+    const t = setInterval(() => setAnnIndex((i) => (i + 1) % announcements.length), 8000);
+    return () => clearInterval(t);
+  }, [announcements.length]);
+
   const serving = entries.filter(e => e.status === 'serving');
   const entriesByQueue = (qId: string) => entries.filter(e => e.queue_id === qId);
+
+  // Clamp indeks: aman saat daftar menyusut (pengumuman kedaluwarsa) tanpa
+  // menunggu efek rotasi menormalkan annIndex.
+  const currentAnn =
+    announcements.length > 0
+      ? announcements[Math.min(annIndex, announcements.length - 1)]
+      : null;
 
   // Isi marquee dipakai dua tempat: strip fixed (mode split) & strip in-flow
   // di bawah video (mode video). Didefinisikan sekali supaya tidak dobel.
@@ -205,6 +254,37 @@ export default function DisplayBoard() {
           <p className="text-xs text-slate-400 mt-0.5">{currentDate}</p>
         </div>
       </header>
+
+      {/* Banner pengumuman superadmin — strip di bawah header, berrotasi antar
+          item. Sengaja di luar <main> agar selalu tampil di fase antrian MAUPUN
+          media (info penting tak hilang saat layar sedang menayangkan video). */}
+      {currentAnn && (
+        <div className="px-10 py-2.5 flex items-center gap-4 text-white"
+          style={{ backgroundColor: ANN_STYLE[currentAnn.announcement_type].bg }}>
+          <span className="flex-shrink-0 flex items-center gap-2 font-black text-xs tracking-widest uppercase">
+            {ANN_STYLE[currentAnn.announcement_type].icon}
+            {ANN_STYLE[currentAnn.announcement_type].label}
+          </span>
+          {/* key=id → hanya bagian teks yang slide+fade saat rotasi; label/ikon
+              & indikator tetap diam. */}
+          <AnimatePresence mode="wait">
+            <motion.div key={currentAnn.id}
+              initial={{ y: 12, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: -12, opacity: 0 }}
+              transition={{ duration: 0.3, ease: 'easeOut' }}
+              className="flex items-baseline gap-2 min-w-0 flex-1">
+              <span className="font-bold truncate flex-shrink-0 max-w-[40%]">{currentAnn.title}</span>
+              <span className="text-white/80 text-sm truncate">{currentAnn.description}</span>
+            </motion.div>
+          </AnimatePresence>
+          {announcements.length > 1 && (
+            <span className="flex-shrink-0 text-xs text-white/70 tabular-nums">
+              {Math.min(annIndex, announcements.length - 1) + 1}/{announcements.length}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Main — fase media (video/foto besar + strip antrian) bergantian dengan
           fase antrian (grid/split), diatur rotasi durasi admin. */}
