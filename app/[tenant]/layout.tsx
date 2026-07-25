@@ -29,18 +29,34 @@ export default function TenantLayout({ children }: { children: ReactNode }) {
     // Portal staff & login tidak butuh status ini — jangan buang request.
     if (!isPublicVisitorPath) return;
     let cancelled = false;
-    systemQueries
-      .getMaintenanceStatus()
-      .then((res) => {
-        if (!cancelled) setMaintenance(res);
-      })
-      .catch(() => {
-        // Gagal cek (mis. backend belum siap) → jangan kunci pengunjung keluar;
-        // perlakukan sebagai tidak-maintenance.
-        if (!cancelled) setMaintenance({ active: false });
-      });
+
+    const check = () => {
+      systemQueries
+        .getMaintenanceStatus()
+        .then((res) => {
+          if (!cancelled) setMaintenance(res);
+        })
+        .catch(() => {
+          // Gagal cek → JANGAN flip status yang sudah diketahui (blip jaringan
+          // tak boleh melepas pengunjung dari layar maintenance yang aktif).
+          // Hanya kegagalan PERTAMA (prev === null) yang default ke tidak-
+          // maintenance, supaya backend belum-siap tak mengunci pengunjung.
+          if (!cancelled) setMaintenance((prev) => prev ?? { active: false });
+        });
+    };
+
+    check(); // langsung saat mount
+    // Poll 5s SELALU: toggle maintenance superadmin tidak punya event WS, jadi
+    // halaman publik yang sudah terbuka (mis. /display di TV) harus menariknya
+    // sendiri. Tanpa ini, efek toggle baru terasa setelah refresh manual —
+    // konsisten dengan poll theme (video_url/running_text) di display-board.
+    // setMaintenance dipanggil dgn nilai non-null tiap poll, jadi hold 'null'
+    // (layar checking) hanya berlaku sebelum respons pertama, tak blank per-tick.
+    const poll = setInterval(check, 5000);
+
     return () => {
       cancelled = true;
+      clearInterval(poll);
     };
   }, [isPublicVisitorPath, pathname]);
 
