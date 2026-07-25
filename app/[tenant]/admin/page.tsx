@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth/auth-context';
 import { queueEntryQueries, tenantUserQueries } from '@/lib/api/queries';
 import { Users, ListOrdered, CheckCircle, Clock, TrendingUp, ArrowUpRight } from 'lucide-react';
 import { useHealth, HEALTH_LABEL } from '@/hooks/use-health';
+import { StatCard } from '@/components/ui/stat-card';
 
 // B2: warna pil status mengikuti keadaan nyata /health, bukan hijau permanen.
 const HEALTH_PILL: Record<string, string> = {
@@ -68,7 +69,9 @@ export default function AdminDashboardPage() {
     };
 
     fetchStats();
-    const interval = setInterval(fetchStats, 10000);
+    // 20s (dulu 10s) — paling rapat dari poller "tetap" (tidak fan-out, tapi
+    // ikut nyumbang ke insiden 429 throttle bareng dashboard superadmin).
+    const interval = setInterval(fetchStats, 20000);
     return () => clearInterval(interval);
   }, [user?.tenant_id]);
 
@@ -83,45 +86,6 @@ export default function AdminDashboardPage() {
   const today = new Date().toLocaleDateString('id-ID', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
   });
-
-  const kpiCards = [
-    {
-      label: 'Menunggu',
-      value: stats.totalWaiting,
-      icon: Clock,
-      color: 'text-amber-600',
-      bg: 'bg-amber-50',
-      border: 'border-amber-100',
-      desc: 'Antrian saat ini',
-    },
-    {
-      label: 'Sedang Dilayani',
-      value: stats.totalServing,
-      icon: TrendingUp,
-      color: 'text-blue-600',
-      bg: 'bg-blue-50',
-      border: 'border-blue-100',
-      desc: 'Di semua loket',
-    },
-    {
-      label: 'Selesai Hari Ini',
-      value: stats.totalCompleted,
-      icon: CheckCircle,
-      color: 'text-emerald-600',
-      bg: 'bg-emerald-50',
-      border: 'border-emerald-100',
-      desc: 'Total terlayani',
-    },
-    {
-      label: 'Operator Aktif',
-      value: stats.totalOperators,
-      icon: Users,
-      color: 'text-purple-600',
-      bg: 'bg-purple-50',
-      border: 'border-purple-100',
-      desc: 'Petugas loket',
-    },
-  ];
 
   return (
     <div className="space-y-6">
@@ -141,24 +105,38 @@ export default function AdminDashboardPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpiCards.map((card) => {
-          const Icon = card.icon;
-          return (
-            <div key={card.label}
-              className={`bg-white border ${card.border} rounded-xl p-4 hover:shadow-sm transition-shadow`}>
-              <div className="flex items-start justify-between mb-3">
-                <div className={`w-8 h-8 rounded-lg ${card.bg} flex items-center justify-center`}>
-                  <Icon className={`w-4 h-4 ${card.color}`} />
-                </div>
-              </div>
-              <p className="text-2xl font-bold text-slate-900">
-                {loading ? '—' : card.value}
-              </p>
-              <p className="text-xs font-medium text-slate-600 mt-0.5">{card.label}</p>
-              <p className="text-[10px] text-slate-400 mt-0.5">{card.desc}</p>
-            </div>
-          );
-        })}
+        <StatCard
+          label="Menunggu"
+          value={stats.totalWaiting}
+          description="Antrian saat ini"
+          icon={Clock}
+          status="waiting"
+          loading={loading}
+        />
+        <StatCard
+          label="Sedang Dilayani"
+          value={stats.totalServing}
+          description="Di semua loket"
+          icon={TrendingUp}
+          status="serving"
+          loading={loading}
+        />
+        <StatCard
+          label="Selesai Hari Ini"
+          value={stats.totalCompleted}
+          description="Total terlayani"
+          icon={CheckCircle}
+          status="completed"
+          loading={loading}
+        />
+        <StatCard
+          label="Operator Aktif"
+          value={stats.totalOperators}
+          description="Petugas loket"
+          icon={Users}
+          status="operator"
+          loading={loading}
+        />
       </div>
 
       {/* Quick actions */}

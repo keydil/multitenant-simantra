@@ -59,7 +59,10 @@ export const useQueueEntries = (tenantId: string, queueId: string, pollingInterv
   return { entries, loading, error, refetch: fetchEntries };
 };
 
-export const useQueueStatus = (tenantId: string, pollingInterval = 3000) => {
+// 3s dulu terlalu rapat (20 req/menit) buat data yang mayoritas agregat
+// harian — nyumbang ke insiden 429 throttle di dashboard admin/superadmin
+// (dipakai TenantAnalytics di kedua panel). 10s masih responsif buat mata.
+export const useQueueStatus = (tenantId: string, pollingInterval = 10000) => {
   const [statusSummary, setStatusSummary] = useState<QueueStatusSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);

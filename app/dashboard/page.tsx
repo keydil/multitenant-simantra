@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { KPICards } from '@/components/kpi-cards';
+import { StatCard } from '@/components/ui/stat-card';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2 } from 'lucide-react';
+import { Loader2, TrendingUp, Activity, CheckCircle, Users } from 'lucide-react';
 import { tenantQueries, queueQueries, queueEntryQueries } from '@/lib/api/queries';
 import type { QueueEntry } from '@/lib/api/types';
 
@@ -126,7 +126,11 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchDashboardData();
-    const interval = setInterval(fetchDashboardData, 30000); // Auto-refresh setiap 30 detik
+    // 60s (dulu 30s) — fetchDashboardData fan-out 3×tenant+1 request per
+    // siklus, nyumbang paling besar ke insiden 429 throttle. Belum fix akar
+    // masalahnya (butuh endpoint agregat, dicatat backlog terpisah), ini
+    // cuma mengurangi frekuensinya.
+    const interval = setInterval(fetchDashboardData, 60000);
     return () => clearInterval(interval);
   }, [fetchDashboardData]);
 
@@ -152,12 +156,37 @@ export default function DashboardPage() {
       </div>
 
       {/* KPI Cards — data real dari DB */}
-      <KPICards
-        totalTenants={stats?.totalTenants ?? 0}
-        totalQueuesToday={stats?.totalQueuesToday ?? 0}
-        totalServing={stats?.totalServing ?? 0}
-        totalCompleted={stats?.totalCompleted ?? 0}
-      />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          label="Instansi Aktif"
+          value={stats?.totalTenants ?? 0}
+          description="Total tenant terdaftar"
+          icon={TrendingUp}
+          color={{ text: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100' }}
+        />
+        <StatCard
+          label="Antrian Hari Ini"
+          value={stats?.totalQueuesToday ?? 0}
+          description="Total tiket masuk"
+          icon={Activity}
+          color={{ text: 'text-violet-600', bg: 'bg-violet-50', border: 'border-violet-100' }}
+        />
+        {/* status="serving" → biru (dulu amber di sini, tabrakan sama admin/page.tsx yang biru — lihat STATUS_COLORS) */}
+        <StatCard
+          label="Sedang Dilayani"
+          value={stats?.totalServing ?? 0}
+          description="Di semua loket saat ini"
+          icon={Users}
+          status="serving"
+        />
+        <StatCard
+          label="Selesai Hari Ini"
+          value={stats?.totalCompleted ?? 0}
+          description="Antrian terlayani"
+          icon={CheckCircle}
+          status="completed"
+        />
+      </div>
 
       {/* Recent Activity — dari data queue_entries terbaru */}
       <Card className="border border-slate-200 bg-white rounded-xl">
