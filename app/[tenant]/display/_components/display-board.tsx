@@ -6,7 +6,7 @@ import { publicQueries } from '@/lib/api/queries';
 import { useRealtime } from '@/hooks/use-realtime';
 import type { Tenant } from '@/lib/types/tenant';
 import type { Queue } from '@/lib/types/queue';
-import type { PublicQueueEntry, Announcement } from '@/lib/api/types';
+import type { PublicQueueEntry, Announcement, Sponsor } from '@/lib/api/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, Wrench, Info } from 'lucide-react';
 
@@ -43,6 +43,10 @@ export default function DisplayBoard() {
   // loadTenant; info/update tak ditampilkan di layar publik.
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [annIndex, setAnnIndex] = useState(0);
+  // Logo sponsor/mitra ("OFFICIAL PARTNERS") — config admin, ikut siklus poll
+  // lambat yang sama dengan tenant/announcements. Hanya dirender saat fase
+  // media (lihat showMedia di JSX).
+  const [sponsors, setSponsors] = useState<Sponsor[]>([]);
   const [queues, setQueues] = useState<Queue[]>([]);
   const [entries, setEntries] = useState<PublicQueueEntry[]>([]);
   const [currentTime, setCurrentTime] = useState('');
@@ -62,11 +66,13 @@ export default function DisplayBoard() {
     try {
       // Tenant (theme) + pengumuman publik ikut siklus lambat yang sama —
       // dua-duanya config admin/superadmin, bukan data antrian realtime.
-      const [tenantData, anns] = await Promise.all([
+      const [tenantData, anns, sponsorData] = await Promise.all([
         publicQueries.getTenant(tenantSlug) as Promise<Tenant>,
         publicQueries.getActiveAnnouncements(tenantSlug),
+        publicQueries.getSponsors(tenantSlug),
       ]);
       setTenant(tenantData);
+      setSponsors(sponsorData);
       // Public display HANYA menampilkan pengumuman genting bagi pengunjung:
       // maintenance & warning (sesuai desain listActiveForTenantPublic). Tipe
       // info/update ditujukan ke admin — sengaja tak muncul di layar publik;
@@ -362,6 +368,27 @@ export default function DisplayBoard() {
               })}
             </div>
             </div>
+            {/* Sponsor/mitra — strip "OFFICIAL PARTNERS", cuma fase media
+                (sejajar area media, di atas running text). Grayscale/opacity
+                biar seragam (desain: logo mono abu). Cuma dirender kalau ada,
+                supaya tak menyita tinggi layar saat tak dikonfigurasi. */}
+            {sponsors.length > 0 && (
+              <div className="h-16 rounded-xl bg-slate-800/60 border border-slate-700 flex items-center gap-5 px-6 flex-shrink-0">
+                <span className="flex-shrink-0 text-[10px] font-black tracking-[0.2em] text-slate-400 uppercase leading-tight">
+                  Official<br />Partners
+                </span>
+                <div className="flex-1 flex items-center justify-around gap-6 overflow-hidden">
+                  {sponsors.map((s) => (
+                    <img
+                      key={s.id}
+                      src={s.image_url}
+                      alt={s.name ?? 'Sponsor'}
+                      className="h-8 max-w-[110px] object-contain grayscale opacity-70"
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
             {/* Running text — ruang tetap di bawah (video digeser ke atas) */}
             <div className="h-14 rounded-xl bg-red-600 flex items-center overflow-hidden flex-shrink-0 relative">
               <div className="w-full h-[2px] bg-white/50 absolute top-0" />

@@ -1,17 +1,33 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { themeQueries, tenantQueries } from '@/lib/api/queries';
+import { sponsorQueries, themeQueries, tenantQueries } from '@/lib/api/queries';
 import { friendlyErrorMessage } from '@/lib/api/errors';
+import { useConfirm } from '@/components/ui/confirm-dialog';
 import { useTenant } from '@/hooks/use-tenant';
-import { Loader2, Palette, Building2, Globe, Lock, MonitorPlay, Upload, Trash2, Type, Save, Film, Image as ImageIcon } from 'lucide-react';
+import type { Sponsor } from '@/lib/api/types';
+import {
+  Loader2, Palette, Building2, Globe, Lock, MonitorPlay, Upload, Trash2, Type, Save, Film,
+  Image as ImageIcon, Handshake, Plus, ChevronUp, ChevronDown, Eye, EyeOff,
+} from 'lucide-react';
 import { toast } from 'sonner';
+
+const MAX_SPONSORS = 8;
 
 export default function AdminSettingsPage() {
   const params = useParams();
   const tenantSlug = params.tenant as string;
   const { tenant, loading: tenantLoading } = useTenant(tenantSlug);
+  const confirm = useConfirm();
+
+  // Logo Sponsor / Mitra — strip "OFFICIAL PARTNERS" di display, cuma fase
+  // media. Self-manage admin, mirror Kelola Keperluan (reorder/toggle/delete).
+  const [sponsors, setSponsors] = useState<Sponsor[]>([]);
+  const [sponsorsLoading, setSponsorsLoading] = useState(true);
+  const [sponsorUploading, setSponsorUploading] = useState(false);
+  const [sponsorReordering, setSponsorReordering] = useState(false);
+  const sponsorFileInputRef = useRef<HTMLInputElement>(null);
 
   // Media Display instansi = self-manage admin. video_url & image_url XOR
   // (backend menjamin). mediaType cuma pilih uploader mana yang ditampilkan.
@@ -79,6 +95,93 @@ export default function AdminSettingsPage() {
       })
       .catch(() => {});
   }, [tenant]);
+
+  const fetchSponsors = useCallback(async () => {
+    if (!tenant) return;
+    try {
+      setSponsors(await sponsorQueries.getByTenant(tenant.id));
+    } catch {
+      // biarkan list terakhir
+    } finally {
+      setSponsorsLoading(false);
+    }
+  }, [tenant]);
+
+  useEffect(() => {
+    fetchSponsors();
+  }, [fetchSponsors]);
+
+  const handleAddSponsor = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !tenant) return;
+
+    if (sponsors.length >= MAX_SPONSORS) {
+      toast.error('Batas logo tercapai', { description: `Maksimal ${MAX_SPONSORS} logo sponsor.` });
+      return;
+    }
+    if (file.size > 500 * 1024) {
+      toast.error('Logo terlalu besar', { description: 'Maksimal 500 KB.' });
+      return;
+    }
+
+    setSponsorUploading(true);
+    try {
+      await sponsorQueries.create(tenant.id, file);
+      toast.success('Logo sponsor ditambahkan');
+      await fetchSponsors();
+    } catch (err) {
+      toast.error('Gagal mengunggah logo', { description: friendlyErrorMessage(err) });
+    } finally {
+      setSponsorUploading(false);
+    }
+  };
+
+  const toggleSponsorActive = async (s: Sponsor) => {
+    try {
+      await sponsorQueries.update(s.id, { is_active: !s.is_active });
+      setSponsors((prev) => prev.map((x) => (x.id === s.id ? { ...x, is_active: !x.is_active } : x)));
+    } catch (err) {
+      toast.error('Gagal mengubah status', { description: friendlyErrorMessage(err) });
+    }
+  };
+
+  // Reorder tukar sort_order dengan tetangga, sama seperti Kelola Keperluan.
+  const moveSponsor = async (index: number, dir: -1 | 1) => {
+    const target = index + dir;
+    if (target < 0 || target >= sponsors.length || sponsorReordering) return;
+    const a = sponsors[index];
+    const b = sponsors[target];
+    setSponsorReordering(true);
+    try {
+      await Promise.all([
+        sponsorQueries.update(a.id, { sort_order: b.sort_order }),
+        sponsorQueries.update(b.id, { sort_order: a.sort_order }),
+      ]);
+      await fetchSponsors();
+    } catch (err) {
+      toast.error('Gagal mengubah urutan', { description: friendlyErrorMessage(err) });
+    } finally {
+      setSponsorReordering(false);
+    }
+  };
+
+  const handleDeleteSponsor = async (s: Sponsor) => {
+    const ok = await confirm({
+      title: `Hapus logo "${s.name || 'sponsor ini'}"?`,
+      description: 'Logo dan filenya akan dihapus permanen dari storage.',
+      confirmText: 'Hapus',
+      variant: 'destructive',
+    });
+    if (!ok) return;
+    try {
+      await sponsorQueries.delete(s.id);
+      toast.success('Logo sponsor dihapus');
+      await fetchSponsors();
+    } catch (err) {
+      toast.error('Gagal menghapus', { description: friendlyErrorMessage(err) });
+    }
+  };
 
   const handleSaveRunningText = async () => {
     if (!tenant) return;
@@ -491,6 +594,99 @@ export default function AdminSettingsPage() {
               </button>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Logo Sponsor / Mitra — self-manage admin, strip "OFFICIAL PARTNERS" saat fase media */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+          <Handshake className="w-4 h-4 text-slate-500" />
+          <h2 className="text-sm font-semibold text-slate-800">Logo Sponsor / Mitra</h2>
+        </div>
+        <div className="p-5 space-y-4">
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Strip &quot;OFFICIAL PARTNERS&quot; yang tampil di layar TV saat fase media. PNG/WebP
+            transparan disarankan, maks 500 KB, maks {MAX_SPONSORS} logo.
+          </p>
+
+          {sponsorsLoading ? (
+            <div className="flex items-center justify-center h-24">
+              <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+              {sponsors.map((s, i) => (
+                <div
+                  key={s.id}
+                  className={`group relative aspect-video rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center p-2 ${s.is_active ? '' : 'opacity-50'}`}
+                >
+                  <img src={s.image_url} alt={s.name ?? 'Logo sponsor'} className="max-w-full max-h-full object-contain" />
+                  {!s.is_active && (
+                    <span className="absolute top-1 left-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-600">
+                      Nonaktif
+                    </span>
+                  )}
+                  <div className="absolute inset-0 rounded-lg bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                    <button
+                      onClick={() => moveSponsor(i, -1)}
+                      disabled={i === 0 || sponsorReordering}
+                      className="p-1.5 rounded-md bg-white/90 text-slate-600 hover:bg-white disabled:opacity-30"
+                      title="Urutkan ke kiri"
+                    >
+                      <ChevronUp className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => moveSponsor(i, 1)}
+                      disabled={i === sponsors.length - 1 || sponsorReordering}
+                      className="p-1.5 rounded-md bg-white/90 text-slate-600 hover:bg-white disabled:opacity-30"
+                      title="Urutkan ke kanan"
+                    >
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => toggleSponsorActive(s)}
+                      className="p-1.5 rounded-md bg-white/90 text-slate-600 hover:bg-white"
+                      title={s.is_active ? 'Nonaktifkan' : 'Aktifkan'}
+                    >
+                      {s.is_active ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                    </button>
+                    <button
+                      onClick={() => handleDeleteSponsor(s)}
+                      className="p-1.5 rounded-md bg-white/90 text-red-500 hover:bg-white"
+                      title="Hapus"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {sponsors.length < MAX_SPONSORS && (
+                <button
+                  onClick={() => sponsorFileInputRef.current?.click()}
+                  disabled={sponsorUploading}
+                  className="aspect-video rounded-lg border-2 border-dashed border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors flex flex-col items-center justify-center gap-1 disabled:opacity-60"
+                >
+                  {sponsorUploading ? (
+                    <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+                  ) : (
+                    <>
+                      <Plus className="w-5 h-5 text-slate-400" />
+                      <span className="text-[11px] text-slate-500 font-medium">Tambah</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          )}
+
+          <input
+            ref={sponsorFileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={handleAddSponsor}
+            className="hidden"
+          />
         </div>
       </div>
 

@@ -158,6 +158,18 @@ export interface VisitPurpose {
   updated_at: string;
 }
 
+/** Logo sponsor/mitra ("OFFICIAL PARTNERS") — strip display, per-tenant. */
+export interface Sponsor {
+  id: string;
+  tenant_id: string;
+  image_url: string;
+  name: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 /** Respons GET /queues/:queueId/stats/today. */
 export interface QueueStatsToday {
   waiting: number;

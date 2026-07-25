@@ -14,6 +14,7 @@ import type {
   QueueEntryStatus,
   QueueStatsToday,
   QueueStatusSummary,
+  Sponsor,
   Tenant,
   TenantPurgePreview,
   TenantTheme,
@@ -269,6 +270,10 @@ export const publicQueries = {
 
   getActiveAnnouncements: (slug: string) =>
     api.get<Announcement[]>(`/public/tenants/${slug}/announcements/active`, { auth: false }),
+
+  /** Strip "OFFICIAL PARTNERS" — hanya aktif, urut sort_order. */
+  getSponsors: (slug: string) =>
+    api.get<Sponsor[]>(`/public/tenants/${slug}/sponsors`, { auth: false }),
 };
 
 // ============================================================================
@@ -326,4 +331,26 @@ export const visitPurposeQueries = {
     api.patch<VisitPurpose>(`/guest-book/purposes/${id}`, updates),
 
   delete: (id: string) => api.delete<void>(`/guest-book/purposes/${id}`),
+};
+
+// ============================================================================
+// SPONSORS (Logo Mitra display — per-tenant)
+// ============================================================================
+export const sponsorQueries = {
+  /** Staff — semua baris (termasuk nonaktif) untuk halaman kelola. */
+  getByTenant: (tenantId: string) => api.get<Sponsor[]>(`/tenants/${tenantId}/sponsors`),
+
+  /** Multipart: file wajib, name opsional (alt text). Maks 8 sponsor/tenant. */
+  create: (tenantId: string, file: File, name?: string) => {
+    const form = new FormData();
+    form.append('file', file);
+    if (name) form.append('name', name);
+    return api.post<Sponsor>(`/tenants/${tenantId}/sponsors`, form);
+  },
+
+  update: (id: string, updates: { name?: string; sort_order?: number; is_active?: boolean }) =>
+    api.patch<Sponsor>(`/sponsors/${id}`, updates),
+
+  /** Hard delete — baris & file logo sekaligus dihapus. */
+  delete: (id: string) => api.delete<{ id: string }>(`/sponsors/${id}`),
 };
