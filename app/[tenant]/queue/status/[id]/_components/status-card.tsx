@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { publicQueries } from '@/lib/api/queries';
+import { ApiError } from '@/lib/api/client';
+import { friendlyErrorMessage } from '@/lib/api/errors';
 import { useRealtime } from '@/hooks/use-realtime';
 import { useTenant } from '@/hooks/use-tenant';
 import type { QueueEntry, Queue, QueueStatus } from '@/lib/types/queue';
@@ -72,6 +74,7 @@ export default function StatusCard() {
   const [queue, setQueue] = useState<Queue | null>(null);
   const [positionAhead, setPositionAhead] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [greeting, setGreeting] = useState('Selamat Datang');
   const prevStatusRef = useRef<QueueStatus | null>(null);
 
@@ -114,8 +117,15 @@ export default function StatusCard() {
         updatePositionAhead(entryData),
       ]);
       if (queueData) setQueue(queueData as Queue);
-    } catch {
-      // entry null → UI menampilkan "Tiket tidak ditemukan"
+    } catch (err) {
+      // 404 beneran = tiket tak ada; error lain (network/server down) TIDAK
+      // boleh diklaim "tidak ditemukan" — tiketnya mungkin ada, server-nya
+      // yang tak terjangkau.
+      setErrorMessage(
+        err instanceof ApiError && err.statusCode === 404
+          ? 'Tiket tidak ditemukan'
+          : friendlyErrorMessage(err)
+      );
     } finally {
       setLoading(false);
     }
@@ -172,7 +182,7 @@ export default function StatusCard() {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center p-8 bg-white rounded-2xl shadow">
           <p className="text-2xl mb-2">⚠️</p>
-          <p className="font-semibold">Tiket tidak ditemukan</p>
+          <p className="font-semibold">{errorMessage ?? 'Tiket tidak ditemukan'}</p>
         </div>
       </div>
     );
@@ -303,10 +313,14 @@ export default function StatusCard() {
             </>
           )}
 
-          {/* Realtime indicator */}
+          {/* Realtime indicator — dulu selalu hijau/"aktif" hardcoded walau
+              WS putus & poll 3s gagal diam-diam. Abu-abu (bukan merah) saat
+              fallback polling — itu masih jalan normal, cuma tak instan. */}
           <div className="flex items-center justify-center gap-2 py-3 border-t border-slate-100">
-            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-            <span className="text-xs text-slate-400">Pembaruan otomatis aktif</span>
+            <span className={`w-1.5 h-1.5 rounded-full ${wsConnected ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+            <span className="text-xs text-slate-400">
+              {wsConnected ? 'Pembaruan otomatis aktif' : 'Mode polling — diperbarui tiap 3 detik'}
+            </span>
           </div>
         </div>
 

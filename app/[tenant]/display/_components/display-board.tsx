@@ -539,10 +539,15 @@ export default function DisplayBoard() {
         )}
       </AnimatePresence>
 
-      {/* View mode indicator */}
+      {/* View mode indicator — dulu selalu "Live" hardcoded, ngeklaim
+          tersambung walau WS putus total & data sudah basi. Sekarang jujur:
+          abu-abu (bukan merah) saat fallback polling, karena polling itu
+          fitur yang memang jalan normal, bukan kerusakan. */}
       <div className="fixed bottom-4 right-4 flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-full px-3 py-1.5">
-        <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-        <span className="text-xs text-slate-400">Live · {viewMode === 'grid' ? 'Grid' : 'Split'}</span>
+        <span className={`w-1.5 h-1.5 rounded-full ${wsConnected ? 'bg-emerald-500 animate-pulse' : 'bg-slate-500'}`} />
+        <span className="text-xs text-slate-400">
+          {wsConnected ? 'Live' : 'Polling'} · {viewMode === 'grid' ? 'Grid' : 'Split'}
+        </span>
       </div>
     </div>
   );

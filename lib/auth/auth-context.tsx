@@ -1,7 +1,8 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { api, ApiError, setAccessToken, refreshSession } from '@/lib/api/client';
+import { api, setAccessToken, refreshSession } from '@/lib/api/client';
+import { friendlyErrorMessage } from '@/lib/api/errors';
 
 export interface AuthTenant {
   id: string;
@@ -96,7 +97,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(result.user);
       window.location.href = '/dashboard';
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Login gagal';
+      // friendlyErrorMessage membedakan ApiError (pesan server) dari TypeError
+      // network (fetch gagal total) — dulu keduanya digilas jadi err.message
+      // mentah, jadi "Failed to fetch" bocor ke user saat backend tak terjangkau.
+      const message = friendlyErrorMessage(err);
       setError(message);
       throw new Error(message);
     }
@@ -144,7 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(result.user);
       window.location.href = destination;
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Login gagal';
+      const message = friendlyErrorMessage(err);
       setError(message);
       throw new Error(message);
     }
@@ -167,8 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.location.href = redirectUrl;
     } catch (err) {
       setSigningOut(false);
-      const message = err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Logout gagal';
-      setError(message);
+      setError(friendlyErrorMessage(err));
       throw err;
     }
   };

@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth/auth-context";
-import { api } from "@/lib/api/client";
+import { api, ApiError } from "@/lib/api/client";
+import { friendlyErrorMessage } from "@/lib/api/errors";
 import { Eye, EyeOff, Loader2, AlertCircle, Clock } from "lucide-react";
 
 interface TenantInfo {
@@ -47,8 +48,14 @@ export default function TenantLoginPage() {
         const data = await api.get<TenantInfo>(`/public/tenants/${tenantSlug}`, { auth: false });
         setTenant(data);
       } catch (err) {
-        // 404 = tidak ada/tidak aktif (lihat FRONTEND_MIGRATION.md §2)
-        setTenantError("Instansi tidak ditemukan");
+        // 404 = tidak ada/tidak aktif (lihat FRONTEND_MIGRATION.md §2). Error
+        // lain (network/server down) TIDAK boleh diklaim "tidak ditemukan" —
+        // instansinya mungkin ada, cuma server-nya yang tak terjangkau.
+        setTenantError(
+          err instanceof ApiError && err.statusCode === 404
+            ? "Instansi tidak ditemukan"
+            : friendlyErrorMessage(err)
+        );
       }
       setTenantLoading(false);
     };
@@ -75,7 +82,7 @@ export default function TenantLoginPage() {
       // Pakai signInTenant — bukan signInSuperadmin!
       await signInTenant(email, password, tenantSlug);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login gagal");
+      setError(friendlyErrorMessage(err));
     } finally {
       setIsLoading(false);
     }

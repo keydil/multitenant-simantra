@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { publicQueries } from '@/lib/api/queries';
+import { ApiError } from '@/lib/api/client';
+import { friendlyErrorMessage } from '@/lib/api/errors';
 import { useTenant } from '@/hooks/use-tenant';
 import type { QueueEntry, Queue } from '@/lib/types/queue';
 import { QRCodeSVG } from 'qrcode.react';
@@ -19,6 +21,7 @@ export default function TicketCard() {
   const [queue, setQueue] = useState<Queue | null>(null);
   const [positionAhead, setPositionAhead] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(15);
   const [currentDate, setCurrentDate] = useState('');
   const [currentTime, setCurrentTime] = useState('');
@@ -35,8 +38,15 @@ export default function TicketCard() {
       ]);
       if (queueData) setQueue(queueData as Queue);
       setPositionAhead(position?.ahead ?? 0);
-    } catch {
-      // entry 404 → biarkan entry null, UI menampilkan "Tiket tidak ditemukan"
+    } catch (err) {
+      // 404 beneran = tiket tak ada; error lain (network/server down) TIDAK
+      // boleh diklaim "tidak ditemukan" — tiketnya mungkin ada, server-nya
+      // yang tak terjangkau.
+      setErrorMessage(
+        err instanceof ApiError && err.statusCode === 404
+          ? 'Tiket tidak ditemukan'
+          : friendlyErrorMessage(err)
+      );
     } finally {
       setLoading(false);
     }
@@ -71,7 +81,7 @@ export default function TicketCard() {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center p-8 bg-white rounded-2xl shadow">
           <p className="text-2xl mb-2">⚠️</p>
-          <p className="font-semibold text-slate-700">Tiket tidak ditemukan</p>
+          <p className="font-semibold text-slate-700">{errorMessage ?? 'Tiket tidak ditemukan'}</p>
         </div>
       </div>
     );

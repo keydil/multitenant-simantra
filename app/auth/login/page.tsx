@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth/auth-context';
+import { friendlyErrorMessage } from '@/lib/api/errors';
 import { Eye, EyeOff, Loader2, AlertCircle, Activity, Clock } from 'lucide-react';
 
 export default function SuperadminLoginPage() {
@@ -39,7 +40,7 @@ export default function SuperadminLoginPage() {
     try {
       await signInSuperadmin(email, password);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login gagal');
+      setError(friendlyErrorMessage(err));
     } finally {
       setIsLoading(false);
     }
