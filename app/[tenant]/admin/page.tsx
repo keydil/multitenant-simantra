@@ -34,6 +34,10 @@ export default function AdminDashboardPage() {
   const { user } = useAuth();
   const health = useHealth();
   const tenantSlug = params.tenant as string;
+  // #4 audit UI template: brand tenant cuma masuk ke elemen navigasi/dekoratif
+  // (kartu Aksi Cepat) — TIDAK pernah ke StatCard/health pill di atas, itu
+  // warna semantik status yang harus sama di semua instansi.
+  const brand = user?.tenant?.brand_color ?? '#1e40af';
   const [stats, setStats] = useState<Stats>({ totalWaiting: 0, totalServing: 0, totalCompleted: 0, totalOperators: 0 });
   const [loading, setLoading] = useState(true);
 
@@ -146,8 +150,8 @@ export default function AdminDashboardPage() {
           <a href={`/${tenantSlug}/admin/guest-book`}
             className="flex items-center justify-between bg-white border border-slate-200 rounded-xl p-4 hover:border-slate-300 hover:shadow-sm transition-all group">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-slate-100 rounded-lg flex items-center justify-center">
-                <ListOrdered className="w-4 h-4 text-slate-600" />
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: `${brand}14` }}>
+                <ListOrdered className="w-4 h-4" style={{ color: brand }} />
               </div>
               <div>
                 <p className="text-sm font-medium text-slate-800">Lihat Buku Tamu</p>
@@ -160,8 +164,8 @@ export default function AdminDashboardPage() {
           <a href={`/${tenantSlug}/admin/operators`}
             className="flex items-center justify-between bg-white border border-slate-200 rounded-xl p-4 hover:border-slate-300 hover:shadow-sm transition-all group">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-slate-100 rounded-lg flex items-center justify-center">
-                <Users className="w-4 h-4 text-slate-600" />
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: `${brand}14` }}>
+                <Users className="w-4 h-4" style={{ color: brand }} />
               </div>
               <div>
                 <p className="text-sm font-medium text-slate-800">Kelola Operator</p>
