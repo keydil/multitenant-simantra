@@ -5,6 +5,7 @@ import { StatCard } from '@/components/ui/stat-card';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, TrendingUp, Activity, CheckCircle, Users } from 'lucide-react';
 import { tenantQueries, queueQueries, queueEntryQueries } from '@/lib/api/queries';
+import { useAuth } from '@/lib/auth/auth-context';
 import type { QueueEntry } from '@/lib/api/types';
 
 interface DashboardStats {
@@ -32,6 +33,7 @@ function timeAgo(dateStr: string): string {
 }
 
 export default function DashboardPage() {
+  const { user } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -134,6 +136,18 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [fetchDashboardData]);
 
+  const greeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Selamat pagi';
+    if (hour < 15) return 'Selamat siang';
+    if (hour < 18) return 'Selamat sore';
+    return 'Selamat malam';
+  };
+
+  const today = new Date().toLocaleDateString('id-ID', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+  });
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -149,10 +163,10 @@ export default function DashboardPage() {
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-        <p className="text-slate-400 text-sm mt-1">
-          Selamat datang kembali! Ini ringkasan sistem kamu.
-        </p>
+        <h1 className="text-2xl font-bold text-slate-900">
+          {greeting()}, {user?.full_name?.split(' ')[0] || 'Superadmin'} 👋
+        </h1>
+        <p className="text-slate-400 text-sm mt-1">{today}</p>
       </div>
 
       {/* KPI Cards — data real dari DB */}
