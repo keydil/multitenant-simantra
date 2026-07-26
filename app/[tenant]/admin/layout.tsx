@@ -114,6 +114,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     return <FullScreenLoader title="Memuat panel admin..." subtitle="Memverifikasi sesi" />;
   }
 
+  // Gerbang render — efek redirect di atas baru jalan SETELAH render pertama,
+  // jadi tanpa ini panel admin sempat berkedip terlihat oleh operator atau oleh
+  // admin instansi lain. Menutup dua hal yang dijaga efek itu sekaligus: role
+  // dan batas tenant. Pola sama dengan app/dashboard/layout.tsx.
+  if (user.role !== 'admin' || user.tenant?.subdomain !== tenantSlug) return null;
+
   const color = tenant?.brand_color || '#1e3a5f';
 
   // ── Wajib Ganti Password ──

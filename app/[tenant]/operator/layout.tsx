@@ -79,6 +79,12 @@ export default function OperatorLayout({ children }: { children: ReactNode }) {
     return <FullScreenLoader title="Memuat panel operator..." subtitle="Memverifikasi sesi" />;
   }
 
+  // Gerbang render — efek redirect di atas baru jalan SETELAH render pertama,
+  // jadi tanpa ini panel operator sempat berkedip terlihat oleh admin atau oleh
+  // operator instansi lain. Menutup dua hal yang dijaga efek itu sekaligus:
+  // role dan batas tenant. Pola sama dengan app/dashboard/layout.tsx.
+  if (user.role !== 'operator' || user.tenant?.subdomain !== tenantSlug) return null;
+
   const color = tenant?.brand_color || '#1e3a5f';
 
   // ── Wajib Ganti Password ──
