@@ -3,6 +3,7 @@
 import { useParams } from 'next/navigation';
 import { useTenant } from '@/hooks/use-tenant';
 import { TenantAnalytics } from '@/components/tenant-analytics';
+import { PageHeader } from '@/components/ui/page-header';
 import { Loader2 } from 'lucide-react';
 
 export default function AdminAnalyticsPage() {
@@ -20,11 +21,7 @@ export default function AdminAnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900">Analitik</h1>
-        <p className="text-sm text-slate-400 mt-0.5">Statistik dan tren performa antrian instansi Anda</p>
-      </div>
+      <PageHeader title="Analitik" subtitle="Statistik dan tren performa antrian instansi Anda" />
 
       {tenant?.id && <TenantAnalytics tenantId={tenant.id} />}
     </div>

@@ -16,8 +16,18 @@ export function friendlyErrorMessage(err: unknown): string {
       case 400:
         return err.message || 'Data yang dikirim tidak valid.';
       case 401:
-        // Umumnya sudah ditangani handleSessionExpired() sebelum sampai sini.
-        return 'Sesi Anda telah berakhir. Silakan masuk kembali.';
+        // 401 TANPA pesan kustom = default framework NestJS/passport-jwt saat
+        // token invalid/expired/hilang ("Unauthorized" generik) — itu beneran
+        // sesi mati, biasanya sudah ditangani handleSessionExpired() sebelum
+        // sampai sini. 401 DENGAN pesan kustom (mis. UnauthorizedException
+        // eksplisit dari login: "Email atau password salah", atau ganti
+        // password: "Password lama salah") BUKAN soal sesi — itu pesan yang
+        // sudah ditulis backend buat manusia, tampilkan apa adanya, sama
+        // prinsipnya kayak 400/409 di atas.
+        if (!err.message || err.message === 'Unauthorized') {
+          return 'Sesi Anda telah berakhir. Silakan masuk kembali.';
+        }
+        return err.message;
       case 403:
         return 'Akun Anda tidak punya izin untuk melakukan aksi ini.';
       case 404:

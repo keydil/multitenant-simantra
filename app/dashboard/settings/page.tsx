@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { PageHeader } from '@/components/ui/page-header';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
@@ -54,11 +55,7 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Pengaturan</h1>
-        <p className="text-slate-400 text-sm mt-1">Konfigurasi sistem global</p>
-      </div>
+      <PageHeader title="Pengaturan" subtitle="Konfigurasi sistem global" size="lg" />
 
       <Card className="border border-slate-200 bg-white rounded-xl max-w-2xl">
         <CardHeader>

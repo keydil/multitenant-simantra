@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { sponsorQueries, themeQueries, tenantQueries } from '@/lib/api/queries';
 import { friendlyErrorMessage } from '@/lib/api/errors';
 import { useConfirm } from '@/components/ui/confirm-dialog';
+import { PageHeader } from '@/components/ui/page-header';
 import { useTenant } from '@/hooks/use-tenant';
 import type { Sponsor } from '@/lib/api/types';
 import {
@@ -302,11 +303,7 @@ export default function AdminSettingsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900">Pengaturan</h1>
-        <p className="text-sm text-slate-400 mt-0.5">Kelola profil dan tampilan instansi</p>
-      </div>
+      <PageHeader title="Pengaturan" subtitle="Kelola profil dan tampilan instansi" />
 
       {/* Profil Instansi */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">

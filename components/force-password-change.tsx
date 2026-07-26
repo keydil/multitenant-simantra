@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Eye, EyeOff, Loader2, ShieldAlert, AlertCircle } from 'lucide-react';
-import { ApiError } from '@/lib/api/client';
+import { friendlyErrorMessage } from '@/lib/api/errors';
 import { useAuth } from '@/lib/auth/auth-context';
 
 interface ForcePasswordChangeProps {
@@ -43,8 +43,7 @@ export function ForcePasswordChange({ brandColor = '#1e3a5f' }: ForcePasswordCha
     try {
       await changePassword(oldPassword, password);
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : 'Gagal mengubah password. Coba lagi.';
-      setError(message);
+      setError(friendlyErrorMessage(err));
       setIsSaving(false);
     }
   };

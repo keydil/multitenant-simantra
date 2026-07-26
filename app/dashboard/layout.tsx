@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { DashboardSidebar } from '@/components/dashboard-sidebar';
 import { useAuth } from '@/lib/auth/auth-context';
 import { ForcePasswordChange } from '@/components/force-password-change';
-import { Loader2 } from 'lucide-react';
+import { FullScreenLoader } from '@/components/ui/full-screen-loader';
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -19,38 +19,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   // ── Signing Out ──
   if (signingOut) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-4 animate-in fade-in duration-300">
-          <div className="relative">
-            <div className="w-12 h-12 rounded-full border-2 border-slate-200" />
-            <Loader2 className="w-12 h-12 animate-spin text-blue-500 absolute inset-0" />
-          </div>
-          <div className="text-center">
-            <p className="text-sm font-medium text-slate-700">Sedang keluar...</p>
-            <p className="text-xs text-slate-400 mt-0.5">Menghapus sesi Anda</p>
-          </div>
-        </div>
-      </div>
-    );
+    return <FullScreenLoader title="Sedang keluar..." subtitle="Menghapus sesi Anda" spinnerColor="text-blue-500" />;
   }
 
   // ── Loading Auth ──
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-4 animate-in fade-in duration-300">
-          <div className="relative">
-            <div className="w-12 h-12 rounded-full border-2 border-slate-200" />
-            <Loader2 className="w-12 h-12 animate-spin text-slate-400 absolute inset-0" />
-          </div>
-          <div className="text-center">
-            <p className="text-sm font-medium text-slate-600">Memuat dashboard...</p>
-            <p className="text-xs text-slate-400 mt-0.5">Memverifikasi sesi superadmin</p>
-          </div>
-        </div>
-      </div>
-    );
+    return <FullScreenLoader title="Memuat dashboard..." subtitle="Memverifikasi sesi superadmin" />;
   }
 
   if (!isAuthenticated) return null;

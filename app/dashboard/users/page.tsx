@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Plus, Edit2, Trash2, Mail, Shield, Loader2, RotateCcw } from 'lucide-react';
+import { PageHeader } from '@/components/ui/page-header';
 import { useTenants, useTenantUsers } from '@/hooks/use-tenant-data';
 import { tenantUserQueries } from '@/lib/api/queries';
 import type { TenantUser } from '@/lib/api/types';
@@ -132,12 +133,11 @@ export default function UserManagementPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Manajemen Pengguna</h1>
-          <p className="text-slate-400 text-sm mt-1">Kelola pengguna tenant dan atur role akses</p>
-        </div>
+      <PageHeader
+        title="Manajemen Pengguna"
+        subtitle="Kelola pengguna tenant dan atur role akses"
+        size="lg"
+        actions={
         <div className="flex items-center gap-3">
           <select
             value={selectedTenantId}
@@ -246,7 +246,8 @@ export default function UserManagementPage() {
             </DialogContent>
           </Dialog>
         </div>
-      </div>
+        }
+      />
 
       {/* Users Table */}
       <Card className="border border-slate-200 bg-white rounded-xl">

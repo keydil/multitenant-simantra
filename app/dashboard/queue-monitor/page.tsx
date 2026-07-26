@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { LiveQueueMonitor } from '@/components/queue-monitor/live-queue-monitor';
 import { Button } from '@/components/ui/button';
 import { useTenants } from '@/hooks/use-tenant-data';
+import { PageHeader } from '@/components/ui/page-header';
 import { Loader2, Eye, Monitor, Grid3x3 } from 'lucide-react';
 
 export default function QueueMonitorPage() {
@@ -50,11 +51,7 @@ export default function QueueMonitorPage() {
     // sidebar + bg-slate-50 + container p-6/max-w-7xl). Dulu di sini ada
     // min-h-screen + bg-slate-50 + header full-bleed sendiri → double shell.
     <div className="space-y-6">
-      {/* Header — pola halaman dashboard lain */}
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Monitor Antrian Live</h1>
-        <p className="text-slate-400 text-sm mt-1">Tampilan antrian real-time dan simulasi kiosk</p>
-      </div>
+      <PageHeader title="Monitor Antrian Live" subtitle="Tampilan antrian real-time dan simulasi kiosk" size="lg" />
 
       {/* Controls */}
       <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-wrap items-center gap-3">

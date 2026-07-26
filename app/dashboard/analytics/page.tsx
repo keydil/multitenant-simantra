@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { RefreshCw } from 'lucide-react';
+import { PageHeader } from '@/components/ui/page-header';
 import { useTenants } from '@/hooks/use-tenant-data';
 import { TenantAnalytics } from '@/components/tenant-analytics';
 import { analyticsQueries } from '@/lib/api/queries';
@@ -56,33 +57,33 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Analitik</h1>
-          <p className="text-slate-400 text-sm mt-1">Statistik dan performa antrian</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleAggregate}
-            disabled={isAggregating}
-            className="flex items-center gap-2 px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-            title="Hitung ulang statistik dari data antrian 30 hari terakhir"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isAggregating ? 'animate-spin' : ''}`} />
-            {isAggregating ? 'Memperbarui...' : 'Perbarui data'}
-          </button>
-          <select
-            value={selectedTenantId}
-            onChange={(e) => setSelectedTenantId(e.target.value)}
-            className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
-          >
-            {tenants.map((tenant) => (
-              <option key={tenant.id} value={tenant.id}>{tenant.name}</option>
-            ))}
-          </select>
-        </div>
-      </div>
+      <PageHeader
+        title="Analitik"
+        subtitle="Statistik dan performa antrian"
+        size="lg"
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleAggregate}
+              disabled={isAggregating}
+              className="flex items-center gap-2 px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              title="Hitung ulang statistik dari data antrian 30 hari terakhir"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isAggregating ? 'animate-spin' : ''}`} />
+              {isAggregating ? 'Memperbarui...' : 'Perbarui data'}
+            </button>
+            <select
+              value={selectedTenantId}
+              onChange={(e) => setSelectedTenantId(e.target.value)}
+              className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+            >
+              {tenants.map((tenant) => (
+                <option key={tenant.id} value={tenant.id}>{tenant.name}</option>
+              ))}
+            </select>
+          </div>
+        }
+      />
 
       {selectedTenantId && (
         <TenantAnalytics key={`${selectedTenantId}-${refreshKey}`} tenantId={selectedTenantId} />

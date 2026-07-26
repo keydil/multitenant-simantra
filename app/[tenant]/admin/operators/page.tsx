@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { tenantUserQueries } from '@/lib/api/queries';
 import { friendlyErrorMessage } from '@/lib/api/errors';
 import { useConfirm } from '@/components/ui/confirm-dialog';
+import { PageHeader } from '@/components/ui/page-header';
 import { useTenant } from '@/hooks/use-tenant';
 import {
   Plus, Edit2, Trash2, Loader2, Mail, Shield, User, RotateCcw,
@@ -147,21 +148,20 @@ export default function AdminOperatorsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900">Kelola Operator</h1>
-          <p className="text-sm text-slate-400 mt-0.5">Atur petugas dan admin instansi</p>
-        </div>
-        <button
-          onClick={() => openDialog()}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-white transition-all hover:opacity-90 active:scale-95"
-          style={{ background: brand }}
-        >
-          <Plus className="w-4 h-4" />
-          Tambah Petugas
-        </button>
-      </div>
+      <PageHeader
+        title="Kelola Operator"
+        subtitle="Atur petugas dan admin instansi"
+        actions={
+          <button
+            onClick={() => openDialog()}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-white transition-all hover:opacity-90 active:scale-95"
+            style={{ background: brand }}
+          >
+            <Plus className="w-4 h-4" />
+            Tambah Petugas
+          </button>
+        }
+      />
 
       {/* Summary */}
       <div className="grid grid-cols-2 gap-4">

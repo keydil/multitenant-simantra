@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Plus, Edit2, Trash2, Clock, Loader2 } from 'lucide-react';
+import { PageHeader } from '@/components/ui/page-header';
 import { useTenants } from '@/hooks/use-tenant-data';
 import { useQueues } from '@/hooks/use-queue-data';
 import { queueQueries } from '@/lib/api/queries';
@@ -106,12 +107,11 @@ export default function QueueManagementPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Kelola Antrian</h1>
-          <p className="text-slate-400 text-sm mt-1">Konfigurasi antrian layanan per tenant</p>
-        </div>
+      <PageHeader
+        title="Kelola Antrian"
+        subtitle="Konfigurasi antrian layanan per tenant"
+        size="lg"
+        actions={
         <div className="flex items-center gap-3">
           <select
             value={selectedTenantId}
@@ -210,7 +210,8 @@ export default function QueueManagementPage() {
             </DialogContent>
           </Dialog>
         </div>
-      </div>
+        }
+      />
 
       {/* Table */}
       <Card className="border border-slate-200 bg-white rounded-xl">

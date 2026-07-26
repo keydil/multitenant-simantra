@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useTenant } from '@/hooks/use-tenant';
 import { publicQueries } from '@/lib/api/queries';
 import { ApiError } from '@/lib/api/client';
+import { friendlyErrorMessage } from '@/lib/api/errors';
 import { toast } from 'sonner';
 import type { Queue } from '@/lib/types/queue';
 import { ArrowLeft, Loader2 } from 'lucide-react';
@@ -47,7 +48,7 @@ export default function ServiceList() {
       toast.error(rateLimited ? 'Terlalu banyak pengambilan tiket' : 'Gagal membuat tiket', {
         description: rateLimited
           ? 'Mohon tunggu sebentar, lalu coba lagi.'
-          : 'Silakan coba lagi, atau minta bantuan petugas.',
+          : friendlyErrorMessage(e),
         // Kiosk dipakai sambil berdiri & sering tidak disentuh lagi — beri
         // waktu baca lebih lama daripada default sonner (4 detik).
         duration: 8000,

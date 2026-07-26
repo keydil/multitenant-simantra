@@ -14,6 +14,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Plus, Edit2, Trash2, AlertTriangle, AlertCircle, Zap, Info, Loader2 } from 'lucide-react';
+import { PageHeader } from '@/components/ui/page-header';
 import { useTenants, useAnnouncements } from '@/hooks/use-tenant-data';
 import { announcementQueries } from '@/lib/api/queries';
 import { useAuth } from '@/lib/auth/auth-context';
@@ -161,12 +162,11 @@ export default function AnnouncementsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Pengumuman</h1>
-          <p className="text-slate-400 text-sm mt-1">Broadcast notifikasi ke semua tenant</p>
-        </div>
+      <PageHeader
+        title="Pengumuman"
+        subtitle="Broadcast notifikasi ke semua tenant"
+        size="lg"
+        actions={
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogTrigger asChild>
             <Button
@@ -305,7 +305,8 @@ export default function AnnouncementsPage() {
             </form>
           </DialogContent>
         </Dialog>
-      </div>
+        }
+      />
 
       {/* Announcements List */}
       <Card className="border border-slate-200 bg-white rounded-xl">

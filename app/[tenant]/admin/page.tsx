@@ -7,6 +7,7 @@ import { queueEntryQueries, tenantUserQueries } from '@/lib/api/queries';
 import { Users, ListOrdered, CheckCircle, Clock, TrendingUp, ArrowUpRight } from 'lucide-react';
 import { useHealth, HEALTH_LABEL } from '@/hooks/use-health';
 import { StatCard } from '@/components/ui/stat-card';
+import { PageHeader } from '@/components/ui/page-header';
 
 // B2: warna pil status mengikuti keadaan nyata /health, bukan hijau permanen.
 const HEALTH_PILL: Record<string, string> = {
@@ -93,19 +94,16 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900">
-            {greeting()}, {user?.full_name?.split(' ')[0] || 'Admin'} 👋
-          </h1>
-          <p className="text-sm text-slate-400 mt-0.5">{today}</p>
-        </div>
-        <div className={`flex items-center gap-2 text-xs border px-3 py-1.5 rounded-full ${HEALTH_PILL[health]}`}>
-          <div className={`w-1.5 h-1.5 rounded-full ${HEALTH_PILL_DOT[health]} ${health === 'checking' ? 'animate-pulse' : ''}`} />
-          {HEALTH_LABEL[health]}
-        </div>
-      </div>
+      <PageHeader
+        title={`${greeting()}, ${user?.full_name?.split(' ')[0] || 'Admin'} 👋`}
+        subtitle={today}
+        actions={
+          <div className={`flex items-center gap-2 text-xs border px-3 py-1.5 rounded-full ${HEALTH_PILL[health]}`}>
+            <div className={`w-1.5 h-1.5 rounded-full ${HEALTH_PILL_DOT[health]} ${health === 'checking' ? 'animate-pulse' : ''}`} />
+            {HEALTH_LABEL[health]}
+          </div>
+        }
+      />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

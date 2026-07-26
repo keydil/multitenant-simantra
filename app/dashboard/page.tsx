@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Loader2, TrendingUp, Activity, CheckCircle, Users } from 'lucide-react';
 import { tenantQueries, queueQueries, queueEntryQueries } from '@/lib/api/queries';
 import { useAuth } from '@/lib/auth/auth-context';
+import { PageHeader } from '@/components/ui/page-header';
 import type { QueueEntry } from '@/lib/api/types';
 
 interface DashboardStats {
@@ -161,13 +162,11 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">
-          {greeting()}, {user?.full_name?.split(' ')[0] || 'Superadmin'} 👋
-        </h1>
-        <p className="text-slate-400 text-sm mt-1">{today}</p>
-      </div>
+      <PageHeader
+        title={`${greeting()}, ${user?.full_name?.split(' ')[0] || 'Superadmin'} 👋`}
+        subtitle={today}
+        size="lg"
+      />
 
       {/* KPI Cards — data real dari DB */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

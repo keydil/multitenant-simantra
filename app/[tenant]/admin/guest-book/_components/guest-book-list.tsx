@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { guestBookQueries, visitPurposeQueries } from '@/lib/api/queries';
 import { friendlyErrorMessage } from '@/lib/api/errors';
+import { PageHeader } from '@/components/ui/page-header';
 import { toast } from 'sonner';
 import type { GuestBook } from '@/lib/api/types';
 import * as XLSX from 'xlsx-js-style';
@@ -133,26 +134,24 @@ export default function GuestBookList({ tenantSlug, tenantId, brandColor, guests
 
   return (
     <div className="space-y-6">
-      {/* Header — mengikuti pola halaman admin lain (h1 slate + subtitle),
-          bukan lagi header full-screen sticky sendiri */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900">Buku Tamu</h1>
-          <p className="text-sm text-slate-400 mt-0.5">Data kunjungan yang tercatat di instansi ini</p>
-        </div>
-        <div className="relative">
-          <button onClick={() => setShowExportMenu(!showExportMenu)}
-            className="flex items-center gap-2 px-4 h-10 rounded-lg border border-slate-200 text-sm font-medium text-slate-700 hover:bg-slate-50">
-            <Download size={15} /> Export Excel <ChevronDown size={14} />
-          </button>
-          {showExportMenu && (
-            <div className="absolute right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden z-20 w-52">
-              <button onClick={() => handleExport('filtered')} className="w-full text-left px-4 py-3 text-sm hover:bg-slate-50 border-b border-slate-100">Export Hasil Filter</button>
-              <button onClick={() => handleExport('all')} className="w-full text-left px-4 py-3 text-sm hover:bg-slate-50">Export Semua Data</button>
-            </div>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        title="Buku Tamu"
+        subtitle="Data kunjungan yang tercatat di instansi ini"
+        actions={
+          <div className="relative">
+            <button onClick={() => setShowExportMenu(!showExportMenu)}
+              className="flex items-center gap-2 px-4 h-10 rounded-lg border border-slate-200 text-sm font-medium text-slate-700 hover:bg-slate-50">
+              <Download size={15} /> Export Excel <ChevronDown size={14} />
+            </button>
+            {showExportMenu && (
+              <div className="absolute right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden z-20 w-52">
+                <button onClick={() => handleExport('filtered')} className="w-full text-left px-4 py-3 text-sm hover:bg-slate-50 border-b border-slate-100">Export Hasil Filter</button>
+                <button onClick={() => handleExport('all')} className="w-full text-left px-4 py-3 text-sm hover:bg-slate-50">Export Semua Data</button>
+              </div>
+            )}
+          </div>
+        }
+      />
 
       {/* Filter */}
       <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-4">

@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { queueQueries } from '@/lib/api/queries';
 import { friendlyErrorMessage } from '@/lib/api/errors';
 import { useConfirm } from '@/components/ui/confirm-dialog';
+import { PageHeader } from '@/components/ui/page-header';
 import { useTenant } from '@/hooks/use-tenant';
 import type { Queue } from '@/lib/types/queue';
 import {
@@ -116,21 +117,20 @@ export default function AdminCountersPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900">Kelola Loket</h1>
-          <p className="text-sm text-slate-400 mt-0.5">Atur jenis layanan dan loket antrian</p>
-        </div>
-        <button
-          onClick={() => openDialog()}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-white transition-all hover:opacity-90 active:scale-95"
-          style={{ background: brand }}
-        >
-          <Plus className="w-4 h-4" />
-          Tambah Loket
-        </button>
-      </div>
+      <PageHeader
+        title="Kelola Loket"
+        subtitle="Atur jenis layanan dan loket antrian"
+        actions={
+          <button
+            onClick={() => openDialog()}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-white transition-all hover:opacity-90 active:scale-95"
+            style={{ background: brand }}
+          >
+            <Plus className="w-4 h-4" />
+            Tambah Loket
+          </button>
+        }
+      />
 
       {/* Queue List */}
       {queues.length === 0 ? (

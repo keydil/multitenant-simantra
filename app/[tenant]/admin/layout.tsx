@@ -6,11 +6,12 @@ import { useAuth } from '@/lib/auth/auth-context';
 import { publicQueries } from '@/lib/api/queries';
 import {
   LayoutDashboard, Users, ListOrdered, ListChecks,
-  BookOpen, Settings, Loader2, BarChart3,
+  BookOpen, Settings, BarChart3,
 } from 'lucide-react';
 import { AppSidebar, type SidebarNavGroup } from '@/components/app-sidebar';
 import { AnnouncementBell } from '@/components/announcement-bell';
 import { ForcePasswordChange } from '@/components/force-password-change';
+import { FullScreenLoader } from '@/components/ui/full-screen-loader';
 import { toast } from 'sonner';
 
 interface TenantInfo {
@@ -105,38 +106,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
   // ── FULL SCREEN: Signing Out ──
   if (signingOut || isLoggingOut) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4 animate-in fade-in duration-300">
-          <div className="relative">
-            <div className="w-12 h-12 rounded-full border-2 border-slate-200" />
-            <Loader2 className="w-12 h-12 animate-spin text-blue-500 absolute inset-0" />
-          </div>
-          <div className="text-center">
-            <p className="text-sm font-medium text-slate-700">Sedang keluar...</p>
-            <p className="text-xs text-slate-400 mt-0.5">Menghapus sesi Anda</p>
-          </div>
-        </div>
-      </div>
-    );
+    return <FullScreenLoader title="Sedang keluar..." subtitle="Menghapus sesi Anda" spinnerColor="text-blue-500" />;
   }
 
   // ── FULL SCREEN: Loading Auth ──
   if (loading || !user) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4 animate-in fade-in duration-300">
-          <div className="relative">
-            <div className="w-12 h-12 rounded-full border-2 border-slate-200" />
-            <Loader2 className="w-12 h-12 animate-spin text-slate-400 absolute inset-0" />
-          </div>
-          <div className="text-center">
-            <p className="text-sm font-medium text-slate-600">Memuat panel admin...</p>
-            <p className="text-xs text-slate-400 mt-0.5">Memverifikasi sesi</p>
-          </div>
-        </div>
-      </div>
-    );
+    return <FullScreenLoader title="Memuat panel admin..." subtitle="Memverifikasi sesi" />;
   }
 
   const color = tenant?.brand_color || '#1e3a5f';
