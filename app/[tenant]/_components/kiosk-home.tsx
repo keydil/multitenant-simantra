@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useTenant } from '@/hooks/use-tenant';
 import { AlertTriangle, Loader2, NotebookPen, Ticket } from 'lucide-react';
 import { GuestBookIllustration, TicketKioskIllustration } from './kiosk-illustrations';
+import { AA_LARGE, AA_TEXT, pickReadable, pickSurface, readableInk } from '@/lib/theme/contrast';
 
 // Fallback dipakai HANYA kalau tenant belum punya baris theme sama sekali.
 // Begitu theme ada, ketiganya diambil apa adanya dari database — tidak ada
@@ -13,6 +14,15 @@ import { GuestBookIllustration, TicketKioskIllustration } from './kiosk-illustra
 const FALLBACK_PRIMARY = '#1e40af';
 const FALLBACK_SECONDARY = '#64748b';
 const FALLBACK_ACCENT = '#10b981';
+
+// Latar efektif tempat teks/ikon berwarna tenant diletakkan — dipakai HANYA
+// sebagai acuan hitung kontras, bukan warna yang dirender. Header memakai tint
+// brand 9% di atas gradient slate/blue terang; badge kartu memakai tint 9% di
+// atas kartu putih. Badge dihitung terhadap putih murni (sedikit optimistis
+// karena tint aslinya menggelapkan latar tipis), makanya ambangnya pakai
+// AA_LARGE yang punya sisa ruang, bukan AA_TEXT.
+const HEADER_BG = '#eef2f9';
+const CARD_BG = '#ffffff';
 
 export default function KioskHome() {
   const params = useParams();
@@ -39,6 +49,34 @@ export default function KioskHome() {
     () => ({ primary, secondary, accent }),
     [primary, secondary, accent],
   );
+
+  // Kontras. Warna tenant dipakai apa adanya SELAMA terbaca; kalau tidak,
+  // yang berganti cuma PENEMPATANNYA — tinta di atasnya, atau cadangan ke
+  // warna tenant lain yang lolos. Tak ada warna baru yang diciptakan.
+  //
+  // Perlu karena kelima palet seed gagal kontras di titik-titik ini: teks
+  // putih di atas primary cuma 2.5–4.2:1, dan accent BPJS (#FED7AA) cuma
+  // 1.35:1 — praktis tak terbaca di layar kiosk yang sering silau.
+  // Permukaan tombol: primary/accent dipakai kalau sanggup memikul teks
+  // terbaca; kalau tidak (warna tengah-rentang seperti #8B5CF6 yang tak
+  // terbaca oleh tinta putih MAUPUN gelap), mundur ke secondary milik tenant
+  // yang sama. Kotak logo tetap primary apa adanya — isinya cuma satu huruf
+  // besar, bukan teks yang harus dibaca menerus.
+  const queueSurface = pickSurface([primary, secondary], AA_TEXT);
+  const guestSurface = pickSurface([accent, secondary], AA_TEXT);
+  const onQueueSurface = readableInk(queueSurface);
+  const onGuestSurface = readableInk(guestSurface);
+  const onPrimary = readableInk(primary);
+  // Judul instansi: primary dulu (identitas utama), secondary sebagai cadangan
+  // karena umumnya versi lebih gelap. Gagal dua-duanya → netral gelap.
+  //
+  // Ambangnya AA_LARGE, bukan AA_TEXT: judul dirender text-3xl font-black
+  // (30px tebal), yang menurut WCAG masuk "teks besar" sehingga cukup 3:1.
+  // Memakai 4.5 di sini justru merugikan — judul keburu jatuh ke netral dan
+  // identitas warna instansi hilang tanpa alasan yang sah.
+  const titleColor = pickReadable([primary, secondary], HEADER_BG, AA_LARGE);
+  const queueIconColor = pickReadable([primary, secondary], CARD_BG, AA_LARGE);
+  const guestIconColor = pickReadable([accent, secondary], CARD_BG, AA_LARGE);
 
   useEffect(() => {
     const update = () => {
@@ -85,8 +123,8 @@ export default function KioskHome() {
               <img src={tenant.logo_url} alt={tenant.name} className="h-14 w-auto object-contain" />
             ) : (
               <div
-                className="h-12 w-12 rounded-xl flex items-center justify-center text-white font-black text-xl"
-                style={{ backgroundColor: primary }}
+                className="h-12 w-12 rounded-xl flex items-center justify-center font-black text-xl"
+                style={{ backgroundColor: primary, color: onPrimary }}
               >
                 {tenant.name.charAt(0)}
               </div>
@@ -95,7 +133,7 @@ export default function KioskHome() {
 
           {/* Center title */}
           <div className="justify-self-center text-center">
-            <h1 className="text-3xl font-black tracking-tight" style={{ color: primary }}>
+            <h1 className="text-3xl font-black tracking-tight" style={{ color: titleColor }}>
               {tenant.name.toUpperCase()}
             </h1>
             <p className="text-xs text-slate-500 font-semibold tracking-widest mt-0.5">
@@ -176,7 +214,7 @@ export default function KioskHome() {
                   className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto shadow-lg"
                   style={{ backgroundColor: `${primary}18` }}
                 >
-                  <Ticket size={38} strokeWidth={1.6} style={{ color: primary }} />
+                  <Ticket size={38} strokeWidth={1.6} style={{ color: queueIconColor }} />
                 </div>
               </motion.div>
               <motion.h3 layout className="text-xl font-black text-slate-800 mb-2">LAYANAN</motion.h3>
@@ -199,8 +237,8 @@ export default function KioskHome() {
                     </p>
                     <button
                       onClick={(e) => { e.stopPropagation(); router.push(`/${tenantSlug}/queue`); }}
-                      className="w-full px-8 py-3 rounded-xl font-bold text-base transition-all shadow-sm text-white"
-                      style={{ backgroundColor: primary }}
+                      className="w-full px-8 py-3 rounded-xl font-bold text-base transition-all shadow-sm"
+                      style={{ backgroundColor: queueSurface, color: onQueueSurface }}
                     >
                       Pilih Layanan
                     </button>
@@ -232,7 +270,7 @@ export default function KioskHome() {
                   className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto shadow-lg"
                   style={{ backgroundColor: `${accent}18` }}
                 >
-                  <NotebookPen size={38} strokeWidth={1.6} style={{ color: accent }} />
+                  <NotebookPen size={38} strokeWidth={1.6} style={{ color: guestIconColor }} />
                 </div>
               </motion.div>
               <motion.h3 layout className="text-xl font-black text-slate-800 mb-2">BUKU TAMU</motion.h3>
@@ -255,8 +293,8 @@ export default function KioskHome() {
                     </p>
                     <button
                       onClick={(e) => { e.stopPropagation(); router.push(`/${tenantSlug}/guest-book`); }}
-                      className="w-full px-8 py-3 rounded-xl font-bold text-base transition-all shadow-sm text-white"
-                      style={{ backgroundColor: accent }}
+                      className="w-full px-8 py-3 rounded-xl font-bold text-base transition-all shadow-sm"
+                      style={{ backgroundColor: guestSurface, color: onGuestSurface }}
                     >
                       Isi Buku Tamu
                     </button>
