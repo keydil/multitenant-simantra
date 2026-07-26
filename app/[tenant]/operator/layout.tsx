@@ -7,6 +7,7 @@ import { publicQueries } from '@/lib/api/queries';
 import { LogOut, Loader2, Activity } from 'lucide-react';
 import { AnnouncementBell } from '@/components/announcement-bell';
 import { ForcePasswordChange } from '@/components/force-password-change';
+import { toast } from 'sonner';
 
 interface TenantInfo {
   id: string;
@@ -26,9 +27,31 @@ export default function OperatorLayout({ children }: { children: ReactNode }) {
     if (!loading && !signingOut) {
       if (!user) { router.push(`/${tenantSlug}/login`); return; }
       if (user.role === 'admin') { router.push(`/${tenantSlug}/admin`); return; }
-      if (user.role !== 'operator') { router.push(`/${tenantSlug}/login`); }
+      if (user.role !== 'operator') { router.push(`/${tenantSlug}/login`); return; }
+      // Guard batas tenant — sama seperti admin/layout.tsx. Data tetap aman
+      // (TenantScopeGuard backend menahan semua baca/tulis lintas-tenant,
+      // sudah diverifikasi empiris), tapi UI bisa nampilin sidebar/branding
+      // tenant lain yang membingungkan kalau slug URL tidak dicek.
+      if (user.tenant?.subdomain !== tenantSlug) {
+        // user.tenant harusnya selalu ada utk role operator (FK tenant_id wajib) —
+        // fallback ke login kalau ternyata tidak, biar tak redirect ke "/undefined/operator".
+        router.push(user.tenant?.subdomain ? `/${user.tenant.subdomain}/operator?wrong_tenant=1` : `/${tenantSlug}/login`);
+      }
     }
   }, [user, loading, signingOut, tenantSlug, router]);
+
+  // Sinyal setelah dikoreksi otomatis ke tenant yang benar (lihat guard di
+  // atas). Dibaca dari window (bukan useSearchParams) — pola yang sama
+  // dengan `sessionExpired` di halaman login, supaya layout ini tidak butuh
+  // Suspense boundary saat prerender.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('wrong_tenant') === '1') {
+      toast.info('Anda diarahkan ke instansi Anda sendiri — URL sebelumnya bukan milik Anda.');
+      url.searchParams.delete('wrong_tenant');
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, []);
 
   useEffect(() => {
     publicQueries.getTenant(tenantSlug)

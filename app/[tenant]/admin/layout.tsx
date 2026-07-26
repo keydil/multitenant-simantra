@@ -11,6 +11,7 @@ import {
 import { AppSidebar, type SidebarNavGroup } from '@/components/app-sidebar';
 import { AnnouncementBell } from '@/components/announcement-bell';
 import { ForcePasswordChange } from '@/components/force-password-change';
+import { toast } from 'sonner';
 
 interface TenantInfo {
   id: string;
@@ -57,9 +58,35 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     if (!loading && !signingOut) {
       if (!user) { router.push(`/${tenantSlug}/login`); return; }
       if (user.role === 'operator') { router.push(`/${tenantSlug}/operator`); return; }
-      if (user.role !== 'admin') { router.push(`/${tenantSlug}/login`); }
+      if (user.role !== 'admin') { router.push(`/${tenantSlug}/login`); return; }
+      // Guard batas tenant: JWT admin terikat ke SATU tenant (user.tenant),
+      // tapi slug di URL bisa ketik/klik bebas ke tenant manapun (bahkan yang
+      // tidak eksis) — dulu tidak pernah dicek di sini, cuma role yang
+      // divalidasi. Data tetap aman (TenantScopeGuard di backend menahan
+      // semua baca/tulis lintas-tenant, sudah diverifikasi empiris), tapi
+      // UI bisa nampilin sidebar/branding tenant lain yang membingungkan.
+      // Redirect ke tenant yang benar + wrong_tenant=1, dibaca effect di
+      // bawah utk kasih toast (bukan diam-diam) setelah mendarat.
+      if (user.tenant?.subdomain !== tenantSlug) {
+        // user.tenant harusnya selalu ada utk role admin (FK tenant_id wajib) —
+        // fallback ke login kalau ternyata tidak, biar tak redirect ke "/undefined/admin".
+        router.push(user.tenant?.subdomain ? `/${user.tenant.subdomain}/admin?wrong_tenant=1` : `/${tenantSlug}/login`);
+      }
     }
   }, [user, loading, signingOut, tenantSlug, router]);
+
+  // Sinyal setelah dikoreksi otomatis ke tenant yang benar (lihat guard di
+  // atas). Dibaca dari window (bukan useSearchParams) — pola yang sama
+  // dengan `sessionExpired` di halaman login, supaya layout ini tidak butuh
+  // Suspense boundary saat prerender.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('wrong_tenant') === '1') {
+      toast.info('Anda diarahkan ke instansi Anda sendiri — URL sebelumnya bukan milik Anda.');
+      url.searchParams.delete('wrong_tenant');
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, []);
 
   useEffect(() => {
     publicQueries.getTenant(tenantSlug)
