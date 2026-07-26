@@ -141,10 +141,11 @@ export default function KioskHome() {
             </p>
           </div>
 
-          {/* Clock right */}
+          {/* Jam kanan — tanggal di atas, jam di bawah supaya jam jadi baris
+              terakhir yang dibaca dan tetap elemen paling besar di sudut ini. */}
           <div className="justify-self-end text-right">
-            <p className="text-4xl font-mono font-bold text-slate-700 tabular-nums">{currentTime}</p>
-            <p className="text-xs text-slate-400 mt-0.5">{currentDate}</p>
+            <p className="text-xs text-slate-400">{currentDate}</p>
+            <p className="text-4xl font-rounded font-bold text-slate-700 tabular-nums mt-0.5">{currentTime}</p>
           </div>
         </header>
       </div>

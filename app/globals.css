@@ -83,6 +83,13 @@
 @theme inline {
   --font-sans: 'Geist', 'Geist Fallback';
   --font-mono: 'Geist Mono', 'Geist Mono Fallback';
+  /* Jam besar di kiosk & display. Urutannya disengaja: ui-rounded & SF Pro
+     Rounded didahulukan supaya perangkat Apple memakai font asli yang diminta;
+     keduanya tak dikenal di Windows/Android sehingga dilewati begitu saja, dan
+     font bulat self-host lewat next/font yang dipakai di sana. Sumbernya
+     sengaja dinamai --font-rounded-src supaya bisa ditukar-tukar font tanpa
+     menyentuh satu pun komponen. */
+  --font-rounded: ui-rounded, 'SF Pro Rounded', var(--font-rounded-src), sans-serif;
   /* Type scale kecil — Tailwind default melompat dari text-xs (12px) langsung
      ke text-sm (14px), padahal chrome UI (label sidebar, badge, meta text)
      banyak butuh 9-13px. Dulu ditulis arbitrer (text-[10px], text-[12.5px],

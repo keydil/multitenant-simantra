@@ -152,7 +152,10 @@ export default function DisplayBoard() {
     }, 3000);
     const t = setInterval(() => {
       const now = new Date();
-      setCurrentTime(now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      // Tanpa detik — sama dengan header kiosk. Detik tak berguna bagi
+      // pengunjung yang menunggu antrian, dan justru bikin angka bergeser tiap
+      // detik kalau font yang dipakai tak punya tabular figures.
+      setCurrentTime(now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }));
       setCurrentDate(now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }));
     }, 1000);
     const switchView = setInterval(() => setViewMode(v => v === 'grid' ? 'split' : 'grid'), 20000);
@@ -255,9 +258,13 @@ export default function DisplayBoard() {
             <p className="text-xs text-slate-400 tracking-widest uppercase">SISTEM ANTRIAN DIGITAL</p>
           </div>
         </div>
+        {/* Tanggal di atas, jam di bawah — sama dengan header kiosk. */}
         <div className="text-right">
-          <p className="text-4xl font-mono font-black text-white tabular-nums">{currentTime}</p>
-          <p className="text-xs text-slate-400 mt-0.5">{currentDate}</p>
+          <p className="text-xs text-slate-400">{currentDate}</p>
+          {/* font-bold, BUKAN font-black: Quicksand berhenti di 700. Minta 900
+              bikin browser memalsukan tebalnya (synthetic bold) dan bentuk
+              bulatnya jadi rusak. */}
+          <p className="text-4xl font-rounded font-bold text-white tabular-nums mt-0.5">{currentTime}</p>
         </div>
       </header>
 
