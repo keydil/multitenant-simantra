@@ -180,20 +180,24 @@ export default function KioskHome() {
           )}
         </AnimatePresence>
 
-        {/* Welcome text */}
-        <AnimatePresence>
-          {activeCard === null && (
-            <motion.div
-              initial={{ opacity: 0, y: -16 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -16 }}
-              className="text-center mb-8 z-20"
-            >
-              <h2 className="text-2xl font-bold text-slate-800">Selamat Datang</h2>
-              <p className="text-slate-500 mt-1">Silakan pilih layanan yang Anda butuhkan</p>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Welcome text — SELALU dirender, bukan dicabut dari DOM via
+            AnimatePresence seperti sebelumnya. <main> ini kolom rata-tengah
+            (justify-center); begitu blok ini di-unmount, kolom kehilangan
+            tinggi ~90px dan seluruh isi di bawahnya (baris kartu) langsung
+            dihitung ulang ke posisi tengah yang baru — SEKETIKA, tanpa
+            animasi, persis di detik teksnya hilang. Itu sumber "kesandung"
+            yang terasa: bukan animasi kartunya yang buruk, tapi lantai di
+            atasnya yang tiba-tiba lenyap. Sekarang blok ini permanen
+            menempati ruang yang sama; yang berubah cuma opacity & posisi
+            visualnya, jadi kolom tak pernah reflow. */}
+        <motion.div
+          animate={{ opacity: activeCard === null ? 1 : 0, y: activeCard === null ? 0 : -16 }}
+          transition={SLIDE_TRANSITION}
+          className="text-center mb-8 z-20 pointer-events-none"
+        >
+          <h2 className="text-2xl font-bold text-slate-800">Selamat Datang</h2>
+          <p className="text-slate-500 mt-1">Silakan pilih layanan yang Anda butuhkan</p>
+        </motion.div>
 
         {/* Card wrapper */}
         <motion.div
