@@ -15,6 +15,15 @@ const FALLBACK_PRIMARY = '#1e40af';
 const FALLBACK_SECONDARY = '#64748b';
 const FALLBACK_ACCENT = '#10b981';
 
+// Satu transition yang dipakai BERSAMA oleh baris pembungkus (geser+gap) dan
+// kedua kartu (lebar/tinggi). Dulu masing-masing punya pegas (spring) dengan
+// stiffness beda (120 vs 200) — tiga animasi selesai di waktu berbeda dengan
+// kurva berbeda pula, jadi terbaca sebagai potongan gerak yang saling susul,
+// bukan satu gestur utuh. Tween berdurasi tetap + kurva ease-out (bukan
+// spring) juga menghapus efek memantul-lewat khas pegas sebelum berhenti —
+// gestur geser di HP berhenti tegas, tidak mantul.
+const SLIDE_TRANSITION = { duration: 0.45, ease: [0.22, 1, 0.36, 1] as const };
+
 // Latar efektif tempat teks/ikon berwarna tenant diletakkan — dipakai HANYA
 // sebagai acuan hitung kontras, bukan warna yang dirender. Header memakai tint
 // brand 9% di atas gradient slate/blue terang; badge kartu memakai tint 9% di
@@ -193,78 +202,103 @@ export default function KioskHome() {
             x: activeCard === 'queue' ? 160 : activeCard === 'guest' ? -160 : 0,
             gap: activeCard === null ? '120px' : '80px',
           }}
-          transition={{ type: 'spring', stiffness: 120, damping: 20 }}
+          transition={SLIDE_TRANSITION}
         >
           {/* CARD 1: LAYANAN ANTRIAN */}
+          {/* Ukuran akhir dikirim lewat `style` biasa, BUKAN `animate`. Dulu
+              width/height diinterpolasi manual lewat animate — itu properti
+              LAYOUT, jadi browser reflow+repaint tiap frame, jalan di CPU,
+              dan itulah sumber kesan "zoom tersendat" yang dikeluhkan.
+              Dengan hanya style biasa + prop `layout` di bawah, framer-motion
+              mendeteksi sendiri perubahan ukuran antar render dan menganimasikannya
+              lewat FLIP (transform scale+translate, di-composite GPU) — teknik
+              yang sama dipakai animasi native HP. Tampilan akhir identik;
+              yang berubah cuma cara browser mengerjakannya. */}
           <motion.div
             layout
             onClick={() => setActiveCard('queue')}
             className={`relative cursor-pointer rounded-[1.5rem] bg-white flex flex-col items-center justify-center transition-all
-              ${activeCard === 'queue' ? 'shadow-2xl z-20' : activeCard === null ? 'shadow-md z-10 hover:shadow-xl' : 'shadow-none opacity-40 z-0'}
+              ${activeCard === 'queue' ? 'shadow-2xl z-20' : activeCard === null ? 'shadow-md z-10 hover:shadow-xl' : 'shadow-md z-0'}
             `}
-            style={activeCard === 'queue' ? { borderTop: `4px solid ${primary}` } : {}}
-            animate={{
+            style={{
               width: activeCard === 'queue' ? 360 : activeCard === null ? 280 : 230,
-              height: activeCard === 'queue' ? 440 : activeCard === null ? 340 : 290,
+              height: activeCard === 'queue' ? 400 : activeCard === null ? 340 : 290,
+              ...(activeCard === 'queue' ? { borderTop: `4px solid ${primary}` } : {}),
             }}
-            transition={{ type: 'spring', stiffness: 200, damping: 25 }}
+            transition={SLIDE_TRANSITION}
           >
-            <div className="p-0 w-full h-full flex flex-col items-center justify-center text-center px-6">
-              <motion.div layout className="mb-4">
+            {/* Rata tengah vertikal. Sempat dicoba dijangkarkan ke atas
+                (justify-start + pt tetap) supaya ikon benar-benar diam saat
+                kartu tumbuh, tapi hasilnya timpang: kartu aktif menyisakan
+                ruang kosong menganggur di bawah tombol. Rata tengah membagi
+                sisa ruang itu atas-bawah, jadi tetap dipakai. */}
+            <div className="w-full h-full flex flex-col items-center justify-center text-center px-6">
+              {/* TANPA prop `layout`. Dulu ikon dan judul menganimasi posisinya
+                  masing-masing, sementara kartunya JUGA menganimasi tinggi —
+                  dua gerakan berdurasi beda yang saling adu. Itu penyebab isi
+                  kartu terlihat bergoyang, bukan fade-nya. Sekarang isi kartu
+                  bergeser sebagai satu blok utuh mengikuti kartunya. */}
+              <div className="mb-4">
                 <div
                   className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto shadow-lg"
                   style={{ backgroundColor: `${primary}18` }}
                 >
                   <Ticket size={38} strokeWidth={1.6} style={{ color: queueIconColor }} />
                 </div>
-              </motion.div>
-              <motion.h3 layout className="text-xl font-black text-slate-800 mb-2">LAYANAN</motion.h3>
+              </div>
+              <h3 className="text-xl font-black text-slate-800 mb-2">LAYANAN</h3>
 
-              <AnimatePresence>
-                {activeCard === null && (
-                  <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                    className="text-slate-400 text-sm px-2">
-                    Ambil nomor antrian untuk layanan tersedia
-                  </motion.p>
-                )}
-              </AnimatePresence>
+              {/* Deskripsi PERMANEN — tetap tampil walau kartu ini bukan yang
+                  dipilih, seperti di desain acuan. Dulu teksnya ditukar antara
+                  versi pendek dan panjang tergantung fokus; pertukaran itu
+                  mengubah tinggi konten sehingga semua ikut bergeser.
+                  Ukuran font juga sengaja TETAP (text-xs), tidak lagi
+                  membesar/mengecil ikut lebar kartu — class Tailwind berubah
+                  seketika sementara lebar kartu berubah halus lewat pegas
+                  framer-motion, jadi teks sempat "meloncat" duluan sebelum
+                  kotaknya selesai menyusut, dan pergantian ukuran itu bisa
+                  mengubah jumlah baris yang membungkus, ikut menggeser isi
+                  kartu. Satu ukuran tetap menghapus dua sumber goyang itu. */}
+              <p className="text-slate-400 px-2 text-xs">
+                Ambil nomor antrian untuk layanan tersedia
+              </p>
 
-              <AnimatePresence>
-                {activeCard === 'queue' && (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                    className="flex flex-col items-center w-full mt-4">
-                    <p className="text-slate-500 mb-6 text-sm leading-relaxed px-2">
-                      Pilih layanan dan ambil nomor antrian digital Anda.
-                    </p>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); router.push(`/${tenantSlug}/queue`); }}
-                      className="w-full px-8 py-3 rounded-xl font-bold text-base transition-all shadow-sm"
-                      style={{ backgroundColor: queueSurface, color: onQueueSurface }}
-                    >
-                      Pilih Layanan
-                    </button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              {activeCard === 'queue' && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); router.push(`/${tenantSlug}/queue`); }}
+                  className="w-full mt-6 px-8 py-3 rounded-xl font-bold text-base transition-all shadow-sm"
+                  style={{ backgroundColor: queueSurface, color: onQueueSurface }}
+                >
+                  Pilih Layanan
+                </button>
+              )}
             </div>
           </motion.div>
 
-          {/* CARD 2: BUKU TAMU */}
+          {/* CARD 2: BUKU TAMU — sama persis dengan kartu Layanan: ukuran
+              lewat style biasa, FLIP via `layout` (lihat komentar kartu itu). */}
           <motion.div
             layout
             onClick={() => setActiveCard('guest')}
             className={`relative cursor-pointer rounded-[1.5rem] bg-white flex flex-col items-center justify-center transition-all
-              ${activeCard === 'guest' ? 'shadow-2xl z-20' : activeCard === null ? 'shadow-md z-10 hover:shadow-xl' : 'shadow-none opacity-40 z-0'}
+              ${activeCard === 'guest' ? 'shadow-2xl z-20' : activeCard === null ? 'shadow-md z-10 hover:shadow-xl' : 'shadow-md z-0'}
             `}
-            style={activeCard === 'guest' ? { borderTop: `4px solid ${accent}` } : {}}
-            animate={{
+            style={{
               width: activeCard === 'guest' ? 360 : activeCard === null ? 280 : 230,
-              height: activeCard === 'guest' ? 440 : activeCard === null ? 340 : 290,
+              height: activeCard === 'guest' ? 400 : activeCard === null ? 340 : 290,
+              ...(activeCard === 'guest' ? { borderTop: `4px solid ${accent}` } : {}),
             }}
-            transition={{ type: 'spring', stiffness: 200, damping: 25 }}
+            transition={SLIDE_TRANSITION}
           >
-            <div className="p-0 w-full h-full flex flex-col items-center justify-center text-center px-6">
-              <motion.div layout className="mb-4">
+            {/* Rata tengah vertikal. Sempat dicoba dijangkarkan ke atas
+                (justify-start + pt tetap) supaya ikon benar-benar diam saat
+                kartu tumbuh, tapi hasilnya timpang: kartu aktif menyisakan
+                ruang kosong menganggur di bawah tombol. Rata tengah membagi
+                sisa ruang itu atas-bawah, jadi tetap dipakai. */}
+            <div className="w-full h-full flex flex-col items-center justify-center text-center px-6">
+              {/* Struktur sama persis dengan kartu Layanan — lihat alasannya
+                  di komentar kartu itu. */}
+              <div className="mb-4">
                 {/* Kelas emerald tetap diganti accent tenant supaya kartu ini
                     ikut theme, persis seperti kartu Layanan yang pakai primary. */}
                 <div
@@ -273,35 +307,23 @@ export default function KioskHome() {
                 >
                   <NotebookPen size={38} strokeWidth={1.6} style={{ color: guestIconColor }} />
                 </div>
-              </motion.div>
-              <motion.h3 layout className="text-xl font-black text-slate-800 mb-2">BUKU TAMU</motion.h3>
+              </div>
+              <h3 className="text-xl font-black text-slate-800 mb-2">BUKU TAMU</h3>
 
-              <AnimatePresence>
-                {activeCard === null && (
-                  <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                    className="text-slate-400 text-sm px-2">
-                    Daftarkan kunjungan Anda di sini
-                  </motion.p>
-                )}
-              </AnimatePresence>
+              {/* Ukuran font tetap — lihat alasannya di komentar kartu Layanan. */}
+              <p className="text-slate-400 px-2 text-xs">
+                Untuk tamu dinas, kunjungan kerja, atau keperluan administratif
+              </p>
 
-              <AnimatePresence>
-                {activeCard === 'guest' && (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                    className="flex flex-col items-center w-full mt-4">
-                    <p className="text-slate-500 mb-6 text-sm leading-relaxed px-2">
-                      Untuk tamu dinas, kunjungan kerja, atau keperluan administratif lainnya.
-                    </p>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); router.push(`/${tenantSlug}/guest-book`); }}
-                      className="w-full px-8 py-3 rounded-xl font-bold text-base transition-all shadow-sm"
-                      style={{ backgroundColor: guestSurface, color: onGuestSurface }}
-                    >
-                      Isi Buku Tamu
-                    </button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              {activeCard === 'guest' && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); router.push(`/${tenantSlug}/guest-book`); }}
+                  className="w-full mt-6 px-8 py-3 rounded-xl font-bold text-base transition-all shadow-sm"
+                  style={{ backgroundColor: guestSurface, color: onGuestSurface }}
+                >
+                  Isi Buku Tamu
+                </button>
+              )}
             </div>
           </motion.div>
         </motion.div>
