@@ -59,6 +59,18 @@ export const tenantQueries = {
     return api.post<{ logo_url: string }>(`/tenants/${tenantId}/logo`, form);
   },
 
+  /** Wordmark judul-tengah kiosk — aset TERPISAH dari logo di atas. Upload
+   *  murni set URL; mode aktif (generated/wordmark) diatur lewat
+   *  themeQueries.update({ header_mode }), bukan di sini. */
+  uploadHeaderWordmark: (tenantId: string, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.post<{ header_wordmark_url: string }>(`/tenants/${tenantId}/header-wordmark`, form);
+  },
+
+  removeHeaderWordmark: (tenantId: string) =>
+    api.delete<{ header_wordmark_url: null }>(`/tenants/${tenantId}/header-wordmark`),
+
   /** Media display: upload video signage (MP4/WebM, maks 50 MB). Clear foto. */
   uploadVideo: (tenantId: string, file: File) => {
     const form = new FormData();

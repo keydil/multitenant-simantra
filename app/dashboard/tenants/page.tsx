@@ -13,6 +13,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TenantsTable, Tenant } from '@/components/tenants-table';
 import { AddTenantDialog, TenantFormData } from '@/components/add-tenant-dialog';
 import { DeleteTenantDialog } from '@/components/delete-tenant-dialog';
@@ -22,6 +25,7 @@ import { useTenants, useTenantTheme } from '@/hooks/use-tenant-data';
 import { tenantQueries, themeQueries } from '@/lib/api/queries';
 import { friendlyErrorMessage } from '@/lib/api/errors';
 import { useConfirm } from '@/components/ui/confirm-dialog';
+import { HEADER_FONT_OPTIONS, HEADER_SUBTITLE_SIZE_OPTIONS } from '@/lib/theme/header-fonts';
 
 export default function TenantsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -55,7 +59,23 @@ export default function TenantsPage() {
     accent_color: '#10B981',
     text_color: '#1F2937',
     background_color: '#FFFFFF',
+    header_mode: 'generated' as 'generated' | 'wordmark',
+    header_title_font: 'default',
+    header_title_bold: true,
+    // string kosong = "tak ada override" (bukan null) supaya <Input> selalu
+    // controlled; dikonversi ke null oleh service saat disimpan (trim() || null).
+    header_subtitle_text: '',
+    header_subtitle_font: 'default',
+    header_subtitle_bold: false,
+    header_subtitle_size: 'sm',
+    header_subtitle_color: '#64748b',
   });
+  // Wordmark judul-tengah kiosk — TERPISAH dari themeFormData karena URL-nya
+  // di-set lewat endpoint upload sendiri (bukan ikut PATCH theme JSON), sama
+  // seperti pola editLogoUrl di atas untuk logo instansi.
+  const [headerWordmarkUrl, setHeaderWordmarkUrl] = useState<string | null>(null);
+  const [wordmarkBusy, setWordmarkBusy] = useState(false);
+  const wordmarkInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (theme) {
@@ -65,7 +85,16 @@ export default function TenantsPage() {
         accent_color: theme.accent_color,
         text_color: theme.text_color,
         background_color: theme.background_color,
+        header_mode: theme.header_mode,
+        header_title_font: theme.header_title_font,
+        header_title_bold: theme.header_title_bold,
+        header_subtitle_text: theme.header_subtitle_text ?? '',
+        header_subtitle_font: theme.header_subtitle_font,
+        header_subtitle_bold: theme.header_subtitle_bold,
+        header_subtitle_size: theme.header_subtitle_size,
+        header_subtitle_color: theme.header_subtitle_color,
       });
+      setHeaderWordmarkUrl(theme.header_wordmark_url);
     }
   }, [theme]);
 
@@ -148,6 +177,48 @@ export default function TenantsPage() {
       toast.error('Gagal mengunggah logo', { description: friendlyErrorMessage(err) });
     } finally {
       setLogoBusy(false);
+    }
+  };
+
+  // Wordmark judul-tengah kiosk — mirip persis handleLogoChange di atas, tapi
+  // scoped ke selectedTenant (dialog Theme & Branding), BUKAN editingTenant
+  // (dialog Edit Instansi terpisah). Upload murni set URL; tidak mengubah
+  // header_mode — superadmin memilih mode aktif lewat toggle terpisah di UI.
+  const handleWordmarkChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !selectedTenant) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Wordmark terlalu besar', { description: 'Maksimal 2 MB.' });
+      return;
+    }
+
+    setWordmarkBusy(true);
+    try {
+      const { header_wordmark_url } = await tenantQueries.uploadHeaderWordmark(selectedTenant.id, file);
+      setHeaderWordmarkUrl(header_wordmark_url);
+      toast.success('Wordmark diperbarui', {
+        description: `Wordmark untuk ${selectedTenant.name} berhasil diunggah.`,
+      });
+    } catch (err) {
+      toast.error('Gagal mengunggah wordmark', { description: friendlyErrorMessage(err) });
+    } finally {
+      setWordmarkBusy(false);
+    }
+  };
+
+  const handleRemoveWordmark = async () => {
+    if (!selectedTenant) return;
+    setWordmarkBusy(true);
+    try {
+      await tenantQueries.removeHeaderWordmark(selectedTenant.id);
+      setHeaderWordmarkUrl(null);
+      toast.success('Wordmark dihapus');
+    } catch (err) {
+      toast.error('Gagal menghapus wordmark', { description: friendlyErrorMessage(err) });
+    } finally {
+      setWordmarkBusy(false);
     }
   };
 
@@ -326,48 +397,235 @@ export default function TenantsPage() {
                       </Button>
                     </DialogTrigger>
                     {selectedTenant?.id === tenant.id && (
-                      <DialogContent className="max-w-md bg-white rounded-2xl border border-slate-200">
-                        <DialogHeader>
+                      // Dulu satu <div> panjang tanpa batas tinggi — begitu
+                      // fitur Judul Kiosk (mode/wordmark/font/subtitle) numpuk
+                      // di bawah 5 input warna, tinggi total dialog gampang
+                      // melebihi layar dan tombol Simpan jadi tak terjangkau
+                      // sama sekali (tak ada scroll). Sekarang DialogContent
+                      // dikunci max-h-[85vh] + flex kolom: header & footer
+                      // (tombol) SELALU terlihat, isi dipecah 2 tab yang
+                      // masing-masing scroll sendiri kalau kepanjangan.
+                      <DialogContent className="max-w-lg bg-white rounded-2xl border border-slate-200 max-h-[85vh] flex flex-col p-0 gap-0">
+                        <DialogHeader className="p-6 pb-4 flex-shrink-0">
                           <DialogTitle className="text-slate-900">Theme & Branding</DialogTitle>
                           <DialogDescription className="text-slate-400 text-sm">
                             Kustomisasi warna untuk {tenant.name}
                           </DialogDescription>
                         </DialogHeader>
-                        <div className="space-y-4 mt-2">
-                          {[
-                            { key: 'primary_color', label: 'Warna Utama' },
-                            { key: 'secondary_color', label: 'Warna Sekunder' },
-                            { key: 'accent_color', label: 'Warna Aksen' },
-                            { key: 'text_color', label: 'Warna Teks' },
-                            { key: 'background_color', label: 'Warna Background' },
-                          ].map(({ key, label }) => (
-                            <div key={key} className="space-y-1.5">
-                              <Label htmlFor={key} className="text-sm font-medium text-slate-700">{label}</Label>
-                              <div className="flex gap-2">
-                                <Input
-                                  id={key}
-                                  type="color"
-                                  value={themeFormData[key as keyof typeof themeFormData]}
-                                  onChange={(e) => setThemeFormData({ ...themeFormData, [key]: e.target.value })}
-                                  className="w-12 h-9 p-1 border-slate-200 rounded-lg"
-                                />
-                                <Input
-                                  type="text"
-                                  value={themeFormData[key as keyof typeof themeFormData]}
-                                  onChange={(e) => setThemeFormData({ ...themeFormData, [key]: e.target.value })}
-                                  className="flex-1 border-slate-200 text-sm font-mono"
-                                />
+
+                        <Tabs defaultValue="warna" className="flex-1 min-h-0 flex flex-col px-6">
+                          <TabsList className="w-full grid grid-cols-2 flex-shrink-0">
+                            <TabsTrigger value="warna">Warna Dasar</TabsTrigger>
+                            <TabsTrigger value="header">Judul Kiosk</TabsTrigger>
+                          </TabsList>
+
+                          <TabsContent value="warna" className="overflow-y-auto space-y-4 py-4">
+                            {[
+                              { key: 'primary_color', label: 'Warna Utama' },
+                              { key: 'secondary_color', label: 'Warna Sekunder' },
+                              { key: 'accent_color', label: 'Warna Aksen' },
+                              { key: 'text_color', label: 'Warna Teks' },
+                              { key: 'background_color', label: 'Warna Background' },
+                            ].map(({ key, label }) => (
+                              <div key={key} className="space-y-1.5">
+                                <Label htmlFor={key} className="text-sm font-medium text-slate-700">{label}</Label>
+                                <div className="flex gap-2">
+                                  <Input
+                                    id={key}
+                                    type="color"
+                                    // Cast literal ke union 5 key warna (bukan
+                                    // `keyof typeof themeFormData` generik) —
+                                    // sejak themeFormData ikut memuat field
+                                    // boolean (header_title_bold dkk), indexed
+                                    // access melebar jadi `string | boolean`.
+                                    // Array ini cuma pernah berisi 5 key warna,
+                                    // jadi cast ini akurat, bukan menipu compiler.
+                                    value={themeFormData[key as 'primary_color' | 'secondary_color' | 'accent_color' | 'text_color' | 'background_color']}
+                                    onChange={(e) => setThemeFormData({ ...themeFormData, [key]: e.target.value })}
+                                    className="w-12 h-9 p-1 border-slate-200 rounded-lg"
+                                  />
+                                  <Input
+                                    type="text"
+                                    value={themeFormData[key as 'primary_color' | 'secondary_color' | 'accent_color' | 'text_color' | 'background_color']}
+                                    onChange={(e) => setThemeFormData({ ...themeFormData, [key]: e.target.value })}
+                                    className="flex-1 border-slate-200 text-sm font-mono"
+                                  />
+                                </div>
                               </div>
+                            ))}
+                          </TabsContent>
+
+                          <TabsContent value="header" className="overflow-y-auto space-y-4 py-4">
+                            {/* Judul tengah kiosk: teks auto-generate dari nama
+                                instansi, ATAU wordmark gambar custom (mis. logotype
+                                Figma). Aset TERPISAH dari Logo Instansi (ikon kotak
+                                kecil di dialog Edit) — ini menggantikan <h1> judul
+                                di header kiosk publik. Wordmark yang sudah diunggah
+                                TETAP tersimpan walau mode balik ke Teks Otomatis,
+                                supaya toggle bolak-balik tak perlu unggah ulang. */}
+                            <div className="space-y-1.5">
+                              <Label className="text-sm font-medium text-slate-700">Mode Judul</Label>
+                              <div className="flex gap-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={themeFormData.header_mode === 'generated' ? 'default' : 'outline'}
+                                  onClick={() => setThemeFormData({ ...themeFormData, header_mode: 'generated' })}
+                                  className={`text-xs flex-1 ${themeFormData.header_mode === 'generated' ? 'bg-slate-900 hover:bg-slate-800 text-white' : 'border-slate-200'}`}
+                                >
+                                  Teks Otomatis
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={themeFormData.header_mode === 'wordmark' ? 'default' : 'outline'}
+                                  onClick={() => setThemeFormData({ ...themeFormData, header_mode: 'wordmark' })}
+                                  className={`text-xs flex-1 ${themeFormData.header_mode === 'wordmark' ? 'bg-slate-900 hover:bg-slate-800 text-white' : 'border-slate-200'}`}
+                                >
+                                  Gambar Wordmark
+                                </Button>
+                              </div>
+                              <div className="flex items-center gap-3 pt-1">
+                                <div className="w-28 h-14 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden flex-shrink-0">
+                                  {headerWordmarkUrl ? (
+                                    <img src={headerWordmarkUrl} alt="Wordmark kiosk" className="w-full h-full object-contain" />
+                                  ) : (
+                                    <ImageIcon className="w-5 h-5 text-slate-300" />
+                                  )}
+                                </div>
+                                <div className="flex flex-col gap-1.5 flex-1">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => wordmarkInputRef.current?.click()}
+                                    disabled={wordmarkBusy}
+                                    className="text-xs border-slate-200 gap-2 justify-center"
+                                  >
+                                    {wordmarkBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                                    {headerWordmarkUrl ? 'Ganti Wordmark' : 'Unggah Wordmark'}
+                                  </Button>
+                                  {headerWordmarkUrl && (
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={handleRemoveWordmark}
+                                      disabled={wordmarkBusy}
+                                      className="text-xs border-slate-200 text-red-600 hover:text-red-700 justify-center"
+                                    >
+                                      Hapus
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                              <input
+                                ref={wordmarkInputRef}
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp"
+                                onChange={handleWordmarkChange}
+                                className="hidden"
+                              />
                             </div>
-                          ))}
-                          <div className="flex justify-end gap-2 pt-2">
-                            <Button variant="outline" onClick={() => setThemeDialogOpen(false)} className="text-sm border-slate-200">
-                              Batal
-                            </Button>
-                            <Button onClick={handleSaveTheme} className="text-sm bg-slate-900 hover:bg-slate-800 text-white">
-                              Simpan Theme
-                            </Button>
-                          </div>
+
+                            {/* Tipografi cuma relevan di mode Teks Otomatis —
+                                mode Wordmark menggantikan judul+subtitle
+                                sepenuhnya dengan gambar, jadi kontrol font di
+                                sini tak berpengaruh apa-apa kalau ditampilkan. */}
+                            {themeFormData.header_mode === 'generated' && (
+                              <div className="space-y-3 pt-3 border-t border-slate-100">
+                                <div className="space-y-1.5">
+                                  <Label className="text-sm font-medium text-slate-700">Font Judul</Label>
+                                  <div className="flex items-center gap-2">
+                                    <Select
+                                      value={themeFormData.header_title_font}
+                                      onValueChange={(v) => setThemeFormData({ ...themeFormData, header_title_font: v })}
+                                    >
+                                      <SelectTrigger className="flex-1 border-slate-200 text-sm">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {HEADER_FONT_OPTIONS.map((f) => (
+                                          <SelectItem key={f.key} value={f.key}>{f.label}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                      <Switch
+                                        checked={themeFormData.header_title_bold}
+                                        onCheckedChange={(v) => setThemeFormData({ ...themeFormData, header_title_bold: v })}
+                                      />
+                                      <span className="text-xs text-slate-500">Bold</span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                  <Label className="text-sm font-medium text-slate-700">Subtitle Kiosk</Label>
+                                  <Input
+                                    value={themeFormData.header_subtitle_text}
+                                    onChange={(e) => setThemeFormData({ ...themeFormData, header_subtitle_text: e.target.value })}
+                                    placeholder="SISTEM ANTRIAN DIGITAL"
+                                    maxLength={100}
+                                    className="border-slate-200 text-sm"
+                                  />
+                                  <div className="flex items-center gap-2">
+                                    <Select
+                                      value={themeFormData.header_subtitle_font}
+                                      onValueChange={(v) => setThemeFormData({ ...themeFormData, header_subtitle_font: v })}
+                                    >
+                                      <SelectTrigger className="flex-1 border-slate-200 text-sm">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {HEADER_FONT_OPTIONS.map((f) => (
+                                          <SelectItem key={f.key} value={f.key}>{f.label}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                      <Switch
+                                        checked={themeFormData.header_subtitle_bold}
+                                        onCheckedChange={(v) => setThemeFormData({ ...themeFormData, header_subtitle_bold: v })}
+                                      />
+                                      <span className="text-xs text-slate-500">Bold</span>
+                                    </div>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <Select
+                                      value={themeFormData.header_subtitle_size}
+                                      onValueChange={(v) => setThemeFormData({ ...themeFormData, header_subtitle_size: v })}
+                                    >
+                                      <SelectTrigger className="flex-1 border-slate-200 text-sm">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {HEADER_SUBTITLE_SIZE_OPTIONS.map((s) => (
+                                          <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <Input
+                                      type="color"
+                                      value={themeFormData.header_subtitle_color}
+                                      onChange={(e) => setThemeFormData({ ...themeFormData, header_subtitle_color: e.target.value })}
+                                      className="w-12 h-9 p-1 border-slate-200 rounded-lg flex-shrink-0"
+                                    />
+                                  </div>
+                                  <p className="text-xs text-slate-400">Kosongkan untuk pakai teks default.</p>
+                                </div>
+                              </div>
+                            )}
+                          </TabsContent>
+                        </Tabs>
+
+                        <div className="flex justify-end gap-2 p-6 pt-4 border-t border-slate-100 flex-shrink-0">
+                          <Button variant="outline" onClick={() => setThemeDialogOpen(false)} className="text-sm border-slate-200">
+                            Batal
+                          </Button>
+                          <Button onClick={handleSaveTheme} className="text-sm bg-slate-900 hover:bg-slate-800 text-white">
+                            Simpan Theme
+                          </Button>
                         </div>
                       </DialogContent>
                     )}

@@ -7,6 +7,7 @@ import { useTenant } from '@/hooks/use-tenant';
 import { AlertTriangle, Loader2, NotebookPen, Ticket } from 'lucide-react';
 import { GuestBookIllustration, TicketKioskIllustration } from './kiosk-illustrations';
 import { AA_LARGE, AA_TEXT, pickReadable, pickSurface, readableInk } from '@/lib/theme/contrast';
+import { headerFontFamily, headerSubtitleSizeClass } from '@/lib/theme/header-fonts';
 
 // Fallback dipakai HANYA kalau tenant belum punya baris theme sama sekali.
 // Begitu theme ada, ketiganya diambil apa adanya dari database — tidak ada
@@ -37,7 +38,11 @@ export default function KioskHome() {
   const params = useParams();
   const tenantSlug = params.tenant as string;
   const router = useRouter();
-  const { tenant, loading, error } = useTenant(tenantSlug);
+  // pollMs: kiosk fisik menyala tanpa siapa pun me-refresh browser. Tanpa ini,
+  // perubahan theme/judul yang superadmin simpan lewat dashboard baru tampil
+  // kalau kebetulan ada yang reload — tak masuk akal untuk instansi produksi.
+  // 5s menyamai interval polling theme di display-board.tsx.
+  const { tenant, loading, error } = useTenant(tenantSlug, { pollMs: 5000 });
 
   const [activeCard, setActiveCard] = useState<'queue' | 'guest' | null>(null);
   const [currentTime, setCurrentTime] = useState('');
@@ -140,14 +145,90 @@ export default function KioskHome() {
             )}
           </div>
 
-          {/* Center title */}
+          {/* Center title — superadmin memilih mode ini per tenant (lihat
+              dashboard/tenants "Judul Kiosk"). Wordmark gambar custom
+              menggantikan judul + subtitle sekaligus: referensi desain
+              (logotype 2 baris) sudah jadi lockup mandiri, jadi menambah
+              subtitle auto-generate di bawahnya akan terasa redundan.
+              Fallback ke teks kalau mode wordmark tapi URL-nya somehow
+              kosong (inkonsistensi data) — jaring pengaman murah, gambar
+              patah lebih buruk daripada teks generik. */}
           <div className="justify-self-center text-center">
-            <h1 className="text-3xl font-black tracking-tight" style={{ color: titleColor }}>
-              {tenant.name.toUpperCase()}
-            </h1>
-            <p className="text-xs text-slate-500 font-semibold tracking-widest mt-0.5">
-              SISTEM ANTRIAN DIGITAL
-            </p>
+            {/* Kiosk poll ulang tenant tiap 5 detik (lihat pollMs di
+                pemanggilan useTenant di atas) supaya perubahan theme dari
+                dashboard superadmin tampil tanpa refresh manual. Tanpa
+                AnimatePresence, pergantian mode/font/teks di sini SNAP
+                seketika — kerasa seperti glitch, terutama pas beralih
+                teks↔wordmark. `key` di bawah SENGAJA komposit dari semua
+                nilai yang memengaruhi tampilan blok ini (bukan cuma
+                `theme?.header_mode`) — supaya animasi cuma menyala kalau
+                sesuatu BENAR-BENAR berubah, bukan tiap tick polling yang
+                datanya ternyata identik (mayoritas polling memang begitu).
+                mode="wait" (bukan crossfade tumpuk) sengaja dipilih: teks
+                lama sepenuhnya hilang dulu baru gambar baru muncul, supaya
+                tak ada momen judul teks dan gambar wordmark saling tumpuk
+                jadi terlihat dobel. */}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={[
+                  theme?.header_mode,
+                  theme?.header_wordmark_url,
+                  tenant.name,
+                  theme?.header_title_font,
+                  theme?.header_title_bold,
+                  titleColor,
+                  theme?.header_subtitle_text,
+                  theme?.header_subtitle_font,
+                  theme?.header_subtitle_bold,
+                  theme?.header_subtitle_size,
+                  theme?.header_subtitle_color,
+                ].join('|')}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={SLIDE_TRANSITION}
+              >
+                {theme?.header_mode === 'wordmark' && theme.header_wordmark_url ? (
+                  <img
+                    src={theme.header_wordmark_url}
+                    alt={tenant.name}
+                    className="h-12 md:h-14 w-auto object-contain mx-auto"
+                  />
+                ) : (
+                  <>
+                    {/* Judul TETAP ikut tenant.name (satu sumber kebenaran nama
+                        instansi, lihat schema.prisma) — superadmin cuma atur
+                        font & bold, bukan teksnya. "Bold" dipetakan ke font-bold
+                        (700), BUKAN font-black (900): sebagian font pilihan
+                        (Poppins, PT Serif, Comic Neue) cuma dimuat sampai 700 —
+                        minta 900 bikin browser memalsukan tebalnya (lihat catatan
+                        sama di app/layout.tsx soal Quicksand). Patrick Hand cuma
+                        punya satu berat (400) sama sekali — kombinasi font itu +
+                        Bold tetap akan disintesis browser, tak terhindarkan
+                        selama Google Fonts sendiri tak menyediakan versi tebalnya. */}
+                    <h1
+                      className={`text-3xl tracking-tight ${theme?.header_title_bold ?? true ? 'font-bold' : 'font-normal'}`}
+                      style={{ color: titleColor, fontFamily: headerFontFamily(theme?.header_title_font) }}
+                    >
+                      {tenant.name.toUpperCase()}
+                    </h1>
+                    {/* Ukuran & warna dulu hardcoded text-xs/text-slate-500 —
+                        sekarang dinamis dari theme. Fallback '#64748b' (slate-500
+                        hex) menjaga tampilan default identik untuk tenant lama
+                        yang belum pernah menyentuh kontrol ini. */}
+                    <p
+                      className={`${headerSubtitleSizeClass(theme?.header_subtitle_size)} tracking-widest mt-0.5 ${theme?.header_subtitle_bold ? 'font-bold' : 'font-normal'}`}
+                      style={{
+                        color: theme?.header_subtitle_color ?? '#64748b',
+                        fontFamily: headerFontFamily(theme?.header_subtitle_font),
+                      }}
+                    >
+                      {theme?.header_subtitle_text || 'SISTEM ANTRIAN DIGITAL'}
+                    </p>
+                  </>
+                )}
+              </motion.div>
+            </AnimatePresence>
           </div>
 
           {/* Jam kanan — tanggal di atas, jam di bawah supaya jam jadi baris

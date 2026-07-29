@@ -122,6 +122,15 @@ export interface TenantTheme {
   running_text: string | null;
   custom_css: string | null;
   is_custom_theme: boolean;
+  header_mode: 'generated' | 'wordmark';
+  header_wordmark_url: string | null;
+  header_title_font: string;
+  header_title_bold: boolean;
+  header_subtitle_text: string | null;
+  header_subtitle_font: string;
+  header_subtitle_bold: boolean;
+  header_subtitle_size: string;
+  header_subtitle_color: string;
   created_at: string;
   updated_at: string;
 }
