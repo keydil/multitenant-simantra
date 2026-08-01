@@ -7,8 +7,8 @@ import { useRealtime } from '@/hooks/use-realtime';
 import type { Tenant } from '@/lib/types/tenant';
 import type { Queue } from '@/lib/types/queue';
 import type { PublicQueueEntry, Announcement, Sponsor } from '@/lib/api/types';
-import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, Wrench, Info, Loader2 } from 'lucide-react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { AlertTriangle, Wrench, Info, Loader2, Megaphone, Hourglass, Inbox } from 'lucide-react';
 import { ApiError } from '@/lib/api/client';
 import { AA_LARGE, AA_TEXT, INK_LIGHT, pickReadable, readableInk } from '@/lib/theme/contrast';
 import { headerFontFamily, headerSubtitleSizeClass } from '@/lib/theme/header-fonts';
@@ -30,6 +30,33 @@ const BOARD_BG = '#0f172a';
 // Warna subtitle bawaan board (slate-400). Dipakai sebagai fallback saat warna
 // subtitle pilihan superadmin gagal kontras di latar navy — lihat subtitleColor.
 const SUBTITLE_FALLBACK = '#94a3b8';
+
+// Satu transition untuk SEMUA transisi struktural di board ini (pergantian
+// fase, pergantian view, crossfade media, rotasi banner). Sebelumnya tiap
+// elemen punya durasi sendiri — 0.3 / 0.35 / 0.4, dua elemen tanpa transition
+// sama sekali (jatuh ke default framer), dan satu jatuh ke SPRING tak
+// terkendali — sehingga potongan-potongan gerak selesai di waktu berbeda dan
+// terbaca saling susul. Nilainya sengaja SAMA PERSIS dengan SLIDE_TRANSITION di
+// kiosk-home.tsx supaya dua layar publik ini terasa satu keluarga.
+//
+// CATATAN: ini BUKAN untuk tiga animasi berulang tak berujung (marquee 30s,
+// denyut kartu 2s, rotasi konik 3s) — ketiganya punya semantik sendiri.
+const SLIDE_TRANSITION = { duration: 0.45, ease: [0.22, 1, 0.36, 1] as const };
+
+// Tangga radius board. Sebelumnya rounded-lg/xl/2xl/3xl dipakai berselang-seling
+// tanpa alasan; sekarang tiap tingkat punya makna:
+//   rounded-2xl → permukaan besar & kartu (panel, kotak media, kartu antrian)
+//   rounded-xl  → elemen kecil (badge, chip, header kolom, strip)
+//   rounded-full→ pil (indikator status)
+// Satu pengecualian yang DISENGAJA: isi kartu "dipanggil" memakai rounded-lg,
+// karena pembungkusnya rounded-xl dengan padding 4px — radius dalam harus lebih
+// kecil dari radius luar supaya lengkungannya sejajar, bukan karena lupa.
+const R_SURFACE = 'rounded-2xl';
+const R_ELEMENT = 'rounded-xl';
+
+// Maksimal kolom yang muat dibaca dari jarak jauh di layar 16:9. Antrian lebih
+// dari ini dipecah jadi beberapa halaman yang berotasi, bukan dijejalkan.
+const GRID_PAGE_SIZE = 4;
 
 function speak(text: string) {
   if (typeof window === 'undefined' || !window.speechSynthesis) return;
@@ -63,7 +90,12 @@ export default function DisplayBoard() {
   const [entries, setEntries] = useState<PublicQueueEntry[]>([]);
   const [currentTime, setCurrentTime] = useState('');
   const [currentDate, setCurrentDate] = useState('');
-  const [viewMode, setViewMode] = useState<'grid' | 'split'>('grid');
+  // Rotasi tampilan disimpan sebagai SATU penghitung langkah, bukan dua state
+  // terpisah (mode + halaman). Dengan dua state, interval harus mengubah
+  // keduanya secara terkoordinasi dan gampang menghasilkan kombinasi mustahil
+  // (mis. mode split tapi halaman ke-3). Satu penghitung mustahil tak sinkron:
+  // mode dan halaman sama-sama DITURUNKAN darinya saat render.
+  const [rotStep, setRotStep] = useState(0);
   // Rotasi display: bergantian fase antrian ↔ media (kalau media di-set).
   const [phase, setPhase] = useState<'queue' | 'media'>('queue');
   const prevServingRef = useRef<Set<string>>(new Set());
@@ -76,6 +108,14 @@ export default function DisplayBoard() {
   // komponen, me-reset ref itu, dan loadData berikutnya akan MENYUARAKAN ULANG
   // SEMUA nomor yang sedang dilayani lewat pengeras suara ruangan.
   const [boot, setBoot] = useState<'loading' | 'ready' | 'notfound' | 'offline'>('loading');
+
+  // Board ini menyala 24 jam dengan TIGA animasi tak berujung sekaligus.
+  // Saat OS meminta gerak dikurangi, yang dimatikan HANYA yang dekoratif
+  // (denyut kartu + rotasi border konik). Marquee SENGAJA tetap jalan: ia
+  // MEMBAWA KONTEN — menghentikannya berarti menyembunyikan teks berjalan yang
+  // panjangnya bisa melebihi layar, jadi justru menghilangkan informasi, bukan
+  // sekadar mengurangi gerak.
+  const reduceMotion = useReducedMotion();
 
   // Theme (video_url/running_text/logo/brand) = config admin, TIDAK punya event
   // WS dan tidak ikut aktivitas antrian. Karena itu di-poll sendiri dengan
@@ -176,6 +216,18 @@ export default function DisplayBoard() {
   const wsConnectedRef = useRef(wsConnected);
   wsConnectedRef.current = wsConnected;
 
+  // Mode & halaman DITURUNKAN dari rotStep, bukan disimpan sendiri. Siklus =
+  // N halaman grid + 1 langkah split. Kalau jumlah antrian berubah di tengah
+  // jalan, pembagiannya ikut menyesuaikan sendiri di tick berikutnya — tak ada
+  // state basi yang perlu direkonsiliasi.
+  const totalGridPages = Math.max(1, Math.ceil(queues.length / GRID_PAGE_SIZE));
+  const cycleStep = rotStep % (totalGridPages + 1);
+  const viewMode: 'grid' | 'split' = cycleStep < totalGridPages ? 'grid' : 'split';
+  const gridPage = viewMode === 'grid' ? cycleStep : 0;
+  // Antrian yang tampil di halaman grid saat ini. Dengan ≤4 antrian ini selalu
+  // seluruh daftar dan perilakunya persis seperti sebelum paginasi ada.
+  const pagedQueues = queues.slice(gridPage * GRID_PAGE_SIZE, (gridPage + 1) * GRID_PAGE_SIZE);
+
   useEffect(() => {
     loadTenant();
     loadData();
@@ -195,7 +247,17 @@ export default function DisplayBoard() {
       setCurrentTime(now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }));
       setCurrentDate(now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }));
     }, 1000);
-    const switchView = setInterval(() => setViewMode(v => v === 'grid' ? 'split' : 'grid'), 20000);
+    // Rotasi tampilan. Siklusnya sekarang: grid-hal-1 → grid-hal-2 → … → split
+    // → kembali ke grid-hal-1. Sengaja MENUMPANG interval yang sudah ada, tidak
+    // menambah timer kelima — dua rotasi yang tak sinkron bikin board tak
+    // pernah tenang.
+    //
+    // Callback-nya cuma menaikkan penghitung, tak membaca state apa pun, jadi
+    // deps useEffect ini tetap [loadData, loadTenant] — syarat mutlak, karena
+    // useEffect inilah pemilik KEEMPAT interval (poll theme, poll data, jam,
+    // rotasi). Deps yang ikut berubah tiap daftar antrian berubah akan
+    // merobohkan dan membangun ulang semuanya, bikin jam melompat.
+    const switchView = setInterval(() => setRotStep((s) => s + 1), 20000);
     return () => { clearInterval(themePoll); clearInterval(dataPoll); clearInterval(t); clearInterval(switchView); };
   }, [loadData, loadTenant]);
 
@@ -293,7 +355,7 @@ export default function DisplayBoard() {
       initial={{ x: '100vw' }}
       animate={{ x: '-100%' }}
       transition={{ duration: 30, repeat: Infinity, ease: 'linear' }}
-      className="whitespace-nowrap text-white font-black text-xl uppercase tracking-widest"
+      className="whitespace-nowrap text-slate-900 font-black text-xl uppercase tracking-widest"
     >
       SELAMAT DATANG DI {tenant?.name?.toUpperCase() ?? 'SIMANTRA'} &nbsp;•&nbsp;{' '}
       <AnimatePresence mode="wait">
@@ -302,7 +364,7 @@ export default function DisplayBoard() {
           initial={{ y: 18, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: -18, opacity: 0 }}
-          transition={{ duration: 0.35, ease: 'easeOut' }}
+          transition={SLIDE_TRANSITION}
           className="inline-block"
         >
           {runningText}
@@ -316,7 +378,7 @@ export default function DisplayBoard() {
   // site tak bisa berbeda. Dirender kalau ada sponsor; lihat dua pemanggilnya
   // di bawah untuk alasan kondisi masing-masing.
   const sponsorStrip = (
-    <div className="h-16 rounded-xl bg-slate-800/60 border border-slate-700 flex items-center gap-5 px-6 flex-shrink-0">
+    <div className={`h-16 ${R_ELEMENT} bg-slate-800 border border-slate-700 flex items-center gap-5 px-6 flex-shrink-0`}>
       <span className="flex-shrink-0 text-[10px] font-black tracking-[0.2em] text-slate-400 uppercase leading-tight">
         Official<br />Partners
       </span>
@@ -459,7 +521,7 @@ export default function DisplayBoard() {
               initial={{ y: 12, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: -12, opacity: 0 }}
-              transition={{ duration: 0.3, ease: 'easeOut' }}
+              transition={SLIDE_TRANSITION}
               className="flex items-baseline gap-2 min-w-0 flex-1">
               <span className="font-bold truncate flex-shrink-0 max-w-[40%]">{currentAnn.title}</span>
               <span className="text-white/80 text-sm truncate">{currentAnn.description}</span>
@@ -487,7 +549,7 @@ export default function DisplayBoard() {
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.98 }}
-            transition={{ duration: 0.4, ease: 'easeOut' }}
+            transition={SLIDE_TRANSITION}
             className="absolute inset-0 p-8 flex flex-col gap-4 justify-center">
             {/* Area media dipatok rasio 16:9 (aspect-video, kaya YouTube).
                 justify-center membagi sisa ruang atas-bawah rata. */}
@@ -508,7 +570,7 @@ export default function DisplayBoard() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    transition={{ duration: 0.4, ease: 'easeOut' }}
+                    transition={SLIDE_TRANSITION}
                     className="absolute inset-0 w-full h-full object-cover"
                   />
                 ) : (
@@ -519,7 +581,7 @@ export default function DisplayBoard() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    transition={{ duration: 0.4, ease: 'easeOut' }}
+                    transition={SLIDE_TRANSITION}
                     className="absolute inset-0 w-full h-full object-cover"
                   />
                 )}
@@ -531,7 +593,7 @@ export default function DisplayBoard() {
                 const servingNow = qEntries.find(e => e.status === 'serving');
                 const waitingCount = qEntries.filter(e => e.status === 'waiting').length;
                 return (
-                  <div key={queue.id} className="rounded-2xl bg-slate-800 border border-slate-700 p-4 flex items-center gap-3">
+                  <div key={queue.id} className={`${R_SURFACE} bg-slate-800 border border-slate-700 p-4 flex items-center gap-3`}>
                     {/* readableInk: `text-white` hardcoded gagal kontras di
                         SEMUA 7 warna antrian tersemai (2.49–4.23 vs ambang 4.5). */}
                     <div className="w-11 h-11 rounded-xl flex items-center justify-center font-black flex-shrink-0"
@@ -556,11 +618,16 @@ export default function DisplayBoard() {
                 biar seragam (desain: logo mono abu). Cuma dirender kalau ada,
                 supaya tak menyita tinggi layar saat tak dikonfigurasi. */}
             {sponsors.length > 0 && sponsorStrip}
-            {/* Running text — ruang tetap di bawah (video digeser ke atas) */}
-            <div className="h-14 rounded-xl bg-red-600 flex items-center overflow-hidden flex-shrink-0 relative">
-              <div className="w-full h-[2px] bg-white/50 absolute top-0" />
+            {/* Running text — ruang tetap di bawah (video digeser ke atas).
+                Pola INVERSI mengikuti desain acuan: badan putih dengan garis
+                merah tipis atas-bawah, bukan sebaliknya seperti dulu. Merah
+                sengaja tetap hardcoded (tak ikut warna instansi) — di sini ia
+                berfungsi sebagai penanda "informasi berjalan" yang seragam di
+                semua instansi, bukan elemen identitas. */}
+            <div className={`h-14 ${R_ELEMENT} bg-white flex items-center overflow-hidden flex-shrink-0 relative`}>
+              <div className="w-full h-[3px] bg-red-600 absolute top-0" />
               {marquee}
-              <div className="w-full h-[2px] bg-white/50 absolute bottom-0" />
+              <div className="w-full h-[3px] bg-red-600 absolute bottom-0" />
             </div>
           </motion.div>
         ) : (
@@ -568,7 +635,7 @@ export default function DisplayBoard() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.4, ease: 'easeOut' }}
+            transition={SLIDE_TRANSITION}
             // pb-20 saat split: strip marquee `fixed` setinggi 56px menutupi
             // dasar layar, sementara padding di sini cuma 32px — tanpa ini
             // dasar kartu kolom kiri tersembunyi di balik strip merah.
@@ -577,7 +644,8 @@ export default function DisplayBoard() {
             // Instansi belum punya layanan aktif. Tanpa cabang ini layar cuma
             // menampilkan navy kosong melompong — terlihat seperti sistemnya
             // rusak, padahal cuma belum dikonfigurasi.
-            <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center gap-2">
+            <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center gap-3">
+              <Inbox className="w-16 h-16 text-slate-600" strokeWidth={1.5} />
               <p className="text-2xl font-bold text-slate-400">Belum ada layanan aktif</p>
               <p className="text-slate-500">Silakan hubungi petugas.</p>
             </div>
@@ -591,19 +659,22 @@ export default function DisplayBoard() {
               flex-1 dan board terbelah dua saat transisi. */}
           <AnimatePresence mode="wait">
           {viewMode === 'grid' ? (
-            <motion.div key="grid" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            // key ikut nomor halaman: pergantian antar halaman grid ikut
+            // ter-crossfade seperti pergantian grid↔split, bukan berganti isi
+            // secara mendadak di tempat.
+            <motion.div key={`grid-${gridPage}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              transition={SLIDE_TRANSITION}
               className="grid gap-6 flex-1 min-h-0"
               style={{
                 // Math.max(…, 1): `repeat(0, 1fr)` itu CSS tak valid dan
                 // dibuang diam-diam oleh browser (grid jatuh ke satu kolom
                 // implisit) — terjadi tiap kali daftar antrian masih kosong.
-                gridTemplateColumns: `repeat(${Math.min(Math.max(queues.length, 1), 4)}, 1fr)`,
-                // Kolom dibatasi 4 tapi queues.map merender SEMUA — tanpa ini
-                // antrian ke-5+ meluber keluar layar alih-alih membungkus ke
-                // baris kedua setinggi sama.
-                gridAutoRows: '1fr',
+                // Dihitung dari pagedQueues, bukan queues: halaman terakhir
+                // bisa berisi kurang dari 4 dan kolomnya harus ikut menyesuaikan
+                // supaya tidak menyisakan kolom kosong menganga.
+                gridTemplateColumns: `repeat(${Math.max(pagedQueues.length, 1)}, 1fr)`,
               }}>
-              {queues.map(queue => {
+              {pagedQueues.map(queue => {
                 const qEntries = entriesByQueue(queue.id);
                 const servingNow = qEntries.filter(e => e.status === 'serving');
                 const waiting = qEntries.filter(e => e.status === 'waiting').slice(0, 6);
@@ -638,17 +709,23 @@ export default function DisplayBoard() {
                       // bukan `absolute`) supaya dialah yang menentukan tinggi, dan
                       // celah 4px untuk border didapat dari padding pembungkus.
                       <motion.div key={e.id} layout
-                        className="relative rounded-xl overflow-hidden shadow-2xl p-[4px]"
-                        animate={{ scale: [1, 1.02, 1] }}
-                        transition={{ duration: 2, repeat: Infinity }}>
+                        className={`relative ${R_ELEMENT} overflow-hidden shadow-2xl p-[4px]`}
+                        // Denyut & rotasi konik = dekoratif murni, dimatikan saat
+                        // OS minta gerak dikurangi. Border tetap terlihat karena
+                        // gradiennya statis, cuma berhenti berputar.
+                        animate={reduceMotion ? undefined : { scale: [1, 1.02, 1] }}
+                        transition={reduceMotion ? undefined : { duration: 2, repeat: Infinity }}>
                         {/* Magic conic border */}
                         <motion.div className="absolute inset-[-150%]"
-                          animate={{ rotate: 360 }}
-                          transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
+                          animate={reduceMotion ? undefined : { rotate: 360 }}
+                          transition={reduceMotion ? undefined : { duration: 3, repeat: Infinity, ease: 'linear' }}
                           style={{ background: `conic-gradient(from 0deg, transparent 0deg, ${queue.color_code ?? brand} 90deg, transparent 180deg, ${queue.color_code ?? brand} 270deg, transparent 360deg)` }}
                         />
+                        {/* rounded-lg DISENGAJA lebih kecil dari pembungkusnya
+                            (rounded-xl): radius dalam harus dikurangi setebal
+                            padding 4px supaya lengkungannya sejajar. */}
                         <div className="relative rounded-lg flex flex-col items-center justify-center py-6 text-center"
-                          style={{ backgroundColor: '#0f172a' }}>
+                          style={{ backgroundColor: BOARD_BG }}>
                           <p className="text-xs text-slate-400 uppercase tracking-widest mb-1">DIPANGGIL</p>
                           <p className="text-5xl font-black" style={{ color: queue.color_code ?? brand }}>{e.ticket_number}</p>
                           {e.service_window && <p className="text-xs text-slate-400 mt-2">Loket {e.service_window}</p>}
@@ -665,8 +742,9 @@ export default function DisplayBoard() {
                     ))}
 
                     {servingNow.length === 0 && waiting.length === 0 && (
-                      <div className="rounded-xl bg-slate-800 border border-dashed border-slate-600 py-6 text-center text-slate-500 text-sm">
-                        Menunggu antrian...
+                      <div className={`${R_ELEMENT} bg-slate-800 border border-dashed border-slate-600 py-6 flex flex-col items-center gap-2 text-slate-500 text-sm`}>
+                        <Hourglass className="w-6 h-6" strokeWidth={1.5} />
+                        Menunggu antrian
                       </div>
                     )}
                   </div>
@@ -675,6 +753,7 @@ export default function DisplayBoard() {
             </motion.div>
           ) : (
             <motion.div key="split" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              transition={SLIDE_TRANSITION}
               className="grid grid-cols-12 gap-8 flex-1 min-h-0">
               {/* Left: compact queue status. overflow-hidden — daftar ini tak
                   punya batas jumlah sama sekali (beda dari grid yang slice(0,6)). */}
@@ -684,7 +763,7 @@ export default function DisplayBoard() {
                   const servingNow = qEntries.find(e => e.status === 'serving');
                   const waitingCount = qEntries.filter(e => e.status === 'waiting').length;
                   return (
-                    <div key={queue.id} className="rounded-2xl bg-slate-800 border border-slate-700 p-4 flex items-center gap-4">
+                    <div key={queue.id} className={`${R_SURFACE} bg-slate-800 border border-slate-700 p-4 flex items-center gap-4`}>
                       {/* readableInk — sama seperti badge di fase media. */}
                       <div className="w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg flex-shrink-0"
                         style={{ backgroundColor: queue.color_code ?? brand, color: readableInk(queue.color_code ?? brand) }}>
@@ -705,7 +784,7 @@ export default function DisplayBoard() {
 
               {/* Right: currently serving big display */}
               <div className="col-span-8 flex flex-col gap-4">
-                <div className="flex-grow rounded-3xl bg-slate-800 border border-slate-700 flex flex-col items-center justify-center p-8 text-center">
+                <div className={`flex-grow ${R_SURFACE} bg-slate-800 border border-slate-700 flex flex-col items-center justify-center p-8 text-center`}>
                   {serving.length > 0 ? (
                     <>
                       <p className="text-sm text-slate-400 uppercase tracking-widest mb-3">SEDANG DIPANGGIL</p>
@@ -721,9 +800,15 @@ export default function DisplayBoard() {
                       })}
                     </>
                   ) : (
-                    <div>
-                      <p className="text-6xl mb-4">📢</p>
-                      <p className="text-slate-500 text-xl font-semibold">Belum ada panggilan</p>
+                    // Dulu emoji 📢 — satu-satunya emoji di seluruh board, dan
+                    // ia jadi elemen terbesar di panel utama saat idle. Ikon
+                    // lucide dipakai supaya seragam dengan ikon lain di file ini
+                    // (Wrench/AlertTriangle/Info) dan bisa ikut warna & ketebalan
+                    // garis yang konsisten.
+                    <div className="flex flex-col items-center gap-4">
+                      <Megaphone className="w-20 h-20 text-slate-600" strokeWidth={1.5} />
+                      <p className="text-slate-400 text-2xl font-semibold">Belum ada panggilan</p>
+                      <p className="text-slate-500">Nomor akan tampil di sini saat dipanggil.</p>
                     </div>
                   )}
                 </div>
@@ -751,12 +836,17 @@ export default function DisplayBoard() {
 
       {/* Running text (split view, fase antrian) */}
       <AnimatePresence>
+        {/* Inversi sama dengan strip in-flow di fase media — lihat komentar di
+            sana. transition sebelumnya TIDAK diisi sama sekali, sehingga `y`
+            jatuh ke spring default framer: satu-satunya elemen di board ini
+            yang memantul. */}
         {viewMode === 'split' && !showMedia && (
           <motion.div initial={{ y: 80 }} animate={{ y: 0 }} exit={{ y: 80 }}
-            className="fixed bottom-0 left-0 w-full h-14 bg-red-600 flex items-center overflow-hidden z-50">
-            <div className="w-full h-[2px] bg-white/50 absolute top-0" />
+            transition={SLIDE_TRANSITION}
+            className="fixed bottom-0 left-0 w-full h-14 bg-white flex items-center overflow-hidden z-50">
+            <div className="w-full h-[3px] bg-red-600 absolute top-0" />
             {marquee}
-            <div className="w-full h-[2px] bg-white/50 absolute bottom-0" />
+            <div className="w-full h-[3px] bg-red-600 absolute bottom-0" />
           </motion.div>
         )}
       </AnimatePresence>
