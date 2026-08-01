@@ -35,6 +35,11 @@ export interface TenantTheme {
   // generated — lihat kiosk-home.tsx untuk logika render + fallback.
   header_mode: 'generated' | 'wordmark';
   header_wordmark_url: string | null;
+  // Latar display board: aset bawaan di public/ ('default') atau gambar
+  // unggahan instansi ('custom'). URL tetap tersimpan walau mode balik ke
+  // default — lihat display-board.tsx untuk logika render + fallback.
+  display_background_mode: 'default' | 'custom';
+  display_background_url: string | null;
   // Tipografi mode 'generated' — lihat lib/theme/header-fonts.ts untuk daftar
   // key font yang valid. Judul TETAP ikut tenant.name (tak ada teks judul
   // terpisah, sengaja); subtitle boleh diganti teksnya (null → fallback).

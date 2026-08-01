@@ -71,6 +71,17 @@ export const tenantQueries = {
   removeHeaderWordmark: (tenantId: string) =>
     api.delete<{ header_wordmark_url: null }>(`/tenants/${tenantId}/header-wordmark`),
 
+  /** Latar display board — pola sama dengan wordmark: upload murni set URL,
+   *  mode aktif (default/custom) lewat themeQueries.update({ display_background_mode }). */
+  uploadDisplayBackground: (tenantId: string, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.post<{ display_background_url: string }>(`/tenants/${tenantId}/display-background`, form);
+  },
+
+  removeDisplayBackground: (tenantId: string) =>
+    api.delete<{ display_background_url: null }>(`/tenants/${tenantId}/display-background`),
+
   /** Media display: upload video signage (MP4/WebM, maks 50 MB). Clear foto. */
   uploadVideo: (tenantId: string, file: File) => {
     const form = new FormData();

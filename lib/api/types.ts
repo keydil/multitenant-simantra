@@ -124,6 +124,8 @@ export interface TenantTheme {
   is_custom_theme: boolean;
   header_mode: 'generated' | 'wordmark';
   header_wordmark_url: string | null;
+  display_background_mode: 'default' | 'custom';
+  display_background_url: string | null;
   header_title_font: string;
   header_title_bold: boolean;
   header_subtitle_text: string | null;
