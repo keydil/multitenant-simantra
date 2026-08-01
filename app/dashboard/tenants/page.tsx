@@ -69,6 +69,7 @@ export default function TenantsPage() {
     header_subtitle_bold: false,
     header_subtitle_size: 'sm',
     header_subtitle_color: '#64748b',
+    display_background_mode: 'default' as 'default' | 'custom',
   });
   // Wordmark judul-tengah kiosk — TERPISAH dari themeFormData karena URL-nya
   // di-set lewat endpoint upload sendiri (bukan ikut PATCH theme JSON), sama
@@ -76,6 +77,10 @@ export default function TenantsPage() {
   const [headerWordmarkUrl, setHeaderWordmarkUrl] = useState<string | null>(null);
   const [wordmarkBusy, setWordmarkBusy] = useState(false);
   const wordmarkInputRef = useRef<HTMLInputElement>(null);
+  // Latar display board — pola persis sama dengan wordmark di atas.
+  const [displayBgUrl, setDisplayBgUrl] = useState<string | null>(null);
+  const [displayBgBusy, setDisplayBgBusy] = useState(false);
+  const displayBgInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (theme) {
@@ -93,8 +98,10 @@ export default function TenantsPage() {
         header_subtitle_bold: theme.header_subtitle_bold,
         header_subtitle_size: theme.header_subtitle_size,
         header_subtitle_color: theme.header_subtitle_color,
+        display_background_mode: theme.display_background_mode,
       });
       setHeaderWordmarkUrl(theme.header_wordmark_url);
+      setDisplayBgUrl(theme.display_background_url);
     }
   }, [theme]);
 
@@ -219,6 +226,50 @@ export default function TenantsPage() {
       toast.error('Gagal menghapus wordmark', { description: friendlyErrorMessage(err) });
     } finally {
       setWordmarkBusy(false);
+    }
+  };
+
+  // Latar display board — bentuknya sengaja identik dengan pasangan wordmark
+  // di atas, termasuk scoping ke selectedTenant (dialog Theme), bukan
+  // editingTenant (dialog Edit Instansi).
+  const handleDisplayBgChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !selectedTenant) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Gambar latar terlalu besar', { description: 'Maksimal 2 MB.' });
+      return;
+    }
+
+    setDisplayBgBusy(true);
+    try {
+      const { display_background_url } = await tenantQueries.uploadDisplayBackground(
+        selectedTenant.id,
+        file,
+      );
+      setDisplayBgUrl(display_background_url);
+      toast.success('Latar display diperbarui', {
+        description: `Latar untuk ${selectedTenant.name} berhasil diunggah.`,
+      });
+    } catch (err) {
+      toast.error('Gagal mengunggah latar', { description: friendlyErrorMessage(err) });
+    } finally {
+      setDisplayBgBusy(false);
+    }
+  };
+
+  const handleRemoveDisplayBg = async () => {
+    if (!selectedTenant) return;
+    setDisplayBgBusy(true);
+    try {
+      await tenantQueries.removeDisplayBackground(selectedTenant.id);
+      setDisplayBgUrl(null);
+      toast.success('Latar display dihapus');
+    } catch (err) {
+      toast.error('Gagal menghapus latar', { description: friendlyErrorMessage(err) });
+    } finally {
+      setDisplayBgBusy(false);
     }
   };
 
@@ -414,9 +465,13 @@ export default function TenantsPage() {
                         </DialogHeader>
 
                         <Tabs defaultValue="warna" className="flex-1 min-h-0 flex flex-col px-6">
-                          <TabsList className="w-full grid grid-cols-2 flex-shrink-0">
+                          {/* grid-cols-3 (bukan 2): tab "Tampilan Display"
+                              ditambahkan — latar TV bukan urusan judul kiosk,
+                              jadi diberi tempatnya sendiri. */}
+                          <TabsList className="w-full grid grid-cols-3 flex-shrink-0">
                             <TabsTrigger value="warna">Warna Dasar</TabsTrigger>
                             <TabsTrigger value="header">Judul Kiosk</TabsTrigger>
+                            <TabsTrigger value="display">Tampilan Display</TabsTrigger>
                           </TabsList>
 
                           <TabsContent value="warna" className="overflow-y-auto space-y-4 py-4">
@@ -616,6 +671,104 @@ export default function TenantsPage() {
                                 </div>
                               </div>
                             )}
+                          </TabsContent>
+
+                          <TabsContent value="display" className="overflow-y-auto space-y-4 py-4">
+                            <div className="space-y-1.5">
+                              <Label className="text-sm font-medium text-slate-700">Latar Layar Antrian</Label>
+                              <p className="text-xs text-slate-400">
+                                Gambar latar papan antrian (TV). Mode Bawaan memakai aset
+                                standar SIMANTRA.
+                              </p>
+                              <div className="flex gap-2 pt-1">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={themeFormData.display_background_mode === 'default' ? 'default' : 'outline'}
+                                  onClick={() => setThemeFormData({ ...themeFormData, display_background_mode: 'default' })}
+                                  className={`text-xs flex-1 ${themeFormData.display_background_mode === 'default' ? 'bg-slate-900 hover:bg-slate-800 text-white' : 'border-slate-200'}`}
+                                >
+                                  Bawaan
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={themeFormData.display_background_mode === 'custom' ? 'default' : 'outline'}
+                                  onClick={() => setThemeFormData({ ...themeFormData, display_background_mode: 'custom' })}
+                                  className={`text-xs flex-1 ${themeFormData.display_background_mode === 'custom' ? 'bg-slate-900 hover:bg-slate-800 text-white' : 'border-slate-200'}`}
+                                >
+                                  Gambar Sendiri
+                                </Button>
+                              </div>
+                              {/* Kontrol unggah HANYA muncul di mode Gambar
+                                  Sendiri. Sebelumnya ia tampil di kedua mode —
+                                  membingungkan, karena di mode Bawaan tak ada
+                                  yang perlu diunggah. Menyembunyikannya tidak
+                                  menghilangkan gambar yang sudah terunggah:
+                                  URL-nya tetap tersimpan di database dan muncul
+                                  lagi begitu mode dikembalikan ke Gambar
+                                  Sendiri. */}
+                              {themeFormData.display_background_mode === 'default' ? (
+                                <div className="flex items-center gap-3 pt-1">
+                                  <div className="w-28 h-16 rounded-lg border border-slate-200 overflow-hidden flex-shrink-0">
+                                    <img src="/nyobabg2.png" alt="Latar bawaan" className="w-full h-full object-cover" />
+                                  </div>
+                                  <p className="text-xs text-slate-500 flex-1">
+                                    Memakai latar standar SIMANTRA.
+                                    {displayBgUrl && ' Gambar unggahan Anda tetap tersimpan.'}
+                                  </p>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="flex items-center gap-3 pt-1">
+                                    <div className="w-28 h-16 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden flex-shrink-0">
+                                      {displayBgUrl ? (
+                                        <img src={displayBgUrl} alt="Latar display" className="w-full h-full object-cover" />
+                                      ) : (
+                                        <ImageIcon className="w-5 h-5 text-slate-300" />
+                                      )}
+                                    </div>
+                                    <div className="flex flex-col gap-1.5 flex-1">
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => displayBgInputRef.current?.click()}
+                                        disabled={displayBgBusy}
+                                        className="text-xs border-slate-200 gap-2 justify-center"
+                                      >
+                                        {displayBgBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                                        {displayBgUrl ? 'Ganti Latar' : 'Unggah Latar'}
+                                      </Button>
+                                      {displayBgUrl && (
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={handleRemoveDisplayBg}
+                                          disabled={displayBgBusy}
+                                          className="text-xs border-slate-200 text-red-600 hover:text-red-700 justify-center"
+                                        >
+                                          Hapus
+                                        </Button>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <p className="text-xs text-slate-400">
+                                    {displayBgUrl
+                                      ? 'Pastikan latar cukup terang dan tenang agar kartu antrian tetap terbaca dari jauh — sistem tidak mengoreksinya otomatis.'
+                                      : 'Belum ada gambar diunggah — layar sementara memakai latar bawaan.'}
+                                  </p>
+                                </>
+                              )}
+                              <input
+                                ref={displayBgInputRef}
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp"
+                                onChange={handleDisplayBgChange}
+                                className="hidden"
+                              />
+                            </div>
                           </TabsContent>
                         </Tabs>
 
