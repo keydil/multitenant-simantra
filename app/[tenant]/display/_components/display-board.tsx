@@ -224,9 +224,15 @@ export default function DisplayBoard() {
   const cycleStep = rotStep % (totalGridPages + 1);
   const viewMode: 'grid' | 'split' = cycleStep < totalGridPages ? 'grid' : 'split';
   const gridPage = viewMode === 'grid' ? cycleStep : 0;
+  // Isi halaman DISEIMBANGKAN, bukan diisi penuh 4 lalu sisanya menumpuk di
+  // halaman terakhir. Dengan 5 antrian, pembagian naif 4+1 menyisakan satu
+  // kartu sebatang kara yang melar selebar layar tiap 20 detik sekali —
+  // terlihat rusak. Membagi rata jadi 3+2 membuat tiap halaman tetap penuh.
+  // Rumusnya: jumlah halaman ditentukan dulu, baru isinya dibagi rata.
+  const perPage = Math.max(1, Math.ceil(queues.length / totalGridPages));
   // Antrian yang tampil di halaman grid saat ini. Dengan ≤4 antrian ini selalu
   // seluruh daftar dan perilakunya persis seperti sebelum paginasi ada.
-  const pagedQueues = queues.slice(gridPage * GRID_PAGE_SIZE, (gridPage + 1) * GRID_PAGE_SIZE);
+  const pagedQueues = queues.slice(gridPage * perPage, (gridPage + 1) * perPage);
 
   useEffect(() => {
     loadTenant();
@@ -742,7 +748,12 @@ export default function DisplayBoard() {
                     ))}
 
                     {servingNow.length === 0 && waiting.length === 0 && (
-                      <div className={`${R_ELEMENT} bg-slate-800 border border-dashed border-slate-600 py-6 flex flex-col items-center gap-2 text-slate-500 text-sm`}>
+                      // flex-1 + justify-center: kolom tanpa antrian dulu cuma
+                      // menyisakan kotak kecil di atas dengan ruang kosong
+                      // menganga di bawahnya — terbaca seperti layar yang gagal
+                      // memuat. Sekarang kotaknya mengisi tinggi kolom dan
+                      // isinya di tengah, jadi terlihat memang sedang kosong.
+                      <div className={`${R_ELEMENT} bg-slate-800 border border-dashed border-slate-600 flex-1 min-h-0 flex flex-col items-center justify-center gap-2 text-slate-500 text-sm`}>
                         <Hourglass className="w-6 h-6" strokeWidth={1.5} />
                         Menunggu antrian
                       </div>
