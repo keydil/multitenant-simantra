@@ -10,7 +10,7 @@ import type { PublicQueueEntry, Announcement, Sponsor } from '@/lib/api/types';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { AlertTriangle, Wrench, Info, Loader2, Megaphone, Hourglass, Inbox } from 'lucide-react';
 import { ApiError } from '@/lib/api/client';
-import { AA_LARGE, AA_TEXT, INK_LIGHT, pickReadable, readableInk } from '@/lib/theme/contrast';
+import { AA_LARGE, AA_TEXT, INK_DARK, pickReadable, readableInk } from '@/lib/theme/contrast';
 import { headerFontFamily, headerSubtitleSizeClass } from '@/lib/theme/header-fonts';
 
 // Gaya banner pengumuman per tipe (warna latar + ikon + label). Statik →
@@ -22,14 +22,24 @@ const ANN_STYLE: Record<Announcement['announcement_type'], { bg: string; icon: R
   info:        { bg: '#334155', icon: <Info className="w-5 h-5" />, label: 'INFO' },
 };
 
-// Acuan hitung kontras. Beda dari kiosk yang latarnya cuma PERKIRAAN (gradient
-// + tint brand di atasnya), di sini `bg-slate-900` MEMANG persis #0f172a — jadi
-// angka kontras yang dihitung terhadap nilai ini akurat, bukan aproksimasi.
-const BOARD_BG = '#0f172a';
+// Aset latar bawaan. Dipakai kalau instansi belum/tidak mengunggah latarnya
+// sendiri — lihat display_background_mode di TenantTheme.
+const DEFAULT_DISPLAY_BG = '/nyobabg2.png';
 
-// Warna subtitle bawaan board (slate-400). Dipakai sebagai fallback saat warna
-// subtitle pilihan superadmin gagal kontras di latar navy — lihat subtitleColor.
-const SUBTITLE_FALLBACK = '#94a3b8';
+// Acuan hitung kontras. Latar papan kini GAMBAR yang bisa diganti instansi
+// kapan saja, jadi menghitung kontras terhadapnya mustahil diandalkan. Karena
+// itu setiap teks yang harus terbaca diletakkan di atas permukaan PUTIH (bar
+// header / kartu putih) dan dihitung terhadap nilai pasti ini. Gambar latar
+// murni dekoratif: tak ada teks yang bergantung padanya.
+const SURFACE = '#ffffff';
+
+// Warna subtitle bawaan (slate-600). Naik dari slate-400 yang dipakai versi
+// navy: di atas putih slate-400 cuma 2.56 (gagal), slate-600 7.58.
+const SUBTITLE_FALLBACK = '#475569';
+
+// Merah strip teks berjalan. Hardcoded & TIDAK ikut warna instansi — perannya
+// penanda "informasi berjalan" yang seragam di semua instansi, bukan identitas.
+const MARQUEE_RED = '#C40000';
 
 // Satu transition untuk SEMUA transisi struktural di board ini (pergantian
 // fase, pergantian view, crossfade media, rotasi banner). Sebelumnya tiap
@@ -279,20 +289,28 @@ export default function DisplayBoard() {
   // bawah tak perlu disentuh sama sekali.
   const brand = primary;
 
-  // Judul instansi. Fallback WAJIB INK_LIGHT eksplisit — default pickReadable
-  // adalah INK_DARK (#0f172a) yang PERSIS warna latar board ini, jadi tenant
-  // yang primary & secondary-nya sama-sama gagal di navy akan mendapat judul
-  // ber-rasio 1.00 alias benar-benar tak terlihat.
-  const titleColor = pickReadable([primary, secondary], BOARD_BG, AA_LARGE, INK_LIGHT);
-  // Warna subtitle disetel superadmin untuk latar kiosk yang TERANG. Default-nya
-  // (#64748b) cuma 3.75 di atas navy — gagal untuk teks kecil. Disaring dulu;
-  // kalau tak lolos, pakai slate-400 yang selama ini hardcoded (6.96).
+  // Judul instansi, dihitung terhadap bar putih header (BUKAN gambar latar).
+  // Di latar terang hubungannya MEMBALIK dari versi navy: primary justru gagal
+  // untuk 3 dari 5 palet tersemai (2.54–2.80 vs ambang 3.0) sementara secondary
+  // lolos untuk kelimanya — pickReadable menanganinya otomatis. Fallback kini
+  // INK_DARK (default fungsinya), kebalikan dari versi navy yang wajib
+  // INK_LIGHT eksplisit.
+  const titleColor = pickReadable([primary, secondary], SURFACE, AA_LARGE, INK_DARK);
+  // Warna subtitle pilihan superadmin memang disetel untuk latar terang, jadi
+  // di sini ia lebih sering terpakai apa adanya. Tetap disaring untuk berjaga.
   const subtitleColor = pickReadable(
     [theme?.header_subtitle_color ?? SUBTITLE_FALLBACK],
-    BOARD_BG,
+    SURFACE,
     AA_TEXT,
     SUBTITLE_FALLBACK,
   );
+  // Latar papan. Mode custom tapi URL kosong → jatuh ke aset bawaan; jaring
+  // pengaman yang sama dengan wordmark. TIDAK ada overlay/validasi kontras
+  // otomatis: latar custom adalah tanggung jawab instansi pengunggah.
+  const backgroundUrl =
+    theme?.display_background_mode === 'custom' && theme.display_background_url
+      ? theme.display_background_url
+      : DEFAULT_DISPLAY_BG;
   // Cek URL-nya juga, bukan cuma mode: kalau mode 'wordmark' tapi filenya sudah
   // dihapus, jatuh ke judul teks — gambar patah lebih buruk daripada teks
   // generik. Jaring pengaman yang sama dengan kiosk-home.tsx.
@@ -361,7 +379,7 @@ export default function DisplayBoard() {
       initial={{ x: '100vw' }}
       animate={{ x: '-100%' }}
       transition={{ duration: 30, repeat: Infinity, ease: 'linear' }}
-      className="whitespace-nowrap text-slate-900 font-black text-xl uppercase tracking-widest"
+      className="whitespace-nowrap text-white font-black text-xl uppercase tracking-widest"
     >
       SELAMAT DATANG DI {tenant?.name?.toUpperCase() ?? 'SIMANTRA'} &nbsp;•&nbsp;{' '}
       <AnimatePresence mode="wait">
@@ -384,7 +402,7 @@ export default function DisplayBoard() {
   // site tak bisa berbeda. Dirender kalau ada sponsor; lihat dua pemanggilnya
   // di bawah untuk alasan kondisi masing-masing.
   const sponsorStrip = (
-    <div className={`h-16 ${R_ELEMENT} bg-slate-800 border border-slate-700 flex items-center gap-5 px-6 flex-shrink-0`}>
+    <div className={`h-16 ${R_ELEMENT} bg-white border border-slate-200 shadow-sm flex items-center gap-5 px-6 flex-shrink-0`}>
       <span className="flex-shrink-0 text-[10px] font-black tracking-[0.2em] text-slate-400 uppercase leading-tight">
         Official<br />Partners
       </span>
@@ -402,20 +420,22 @@ export default function DisplayBoard() {
   );
 
   // ── Layar boot ────────────────────────────────────────────────────────────
-  // Semua bg-slate-900 (BUKAN bg-slate-50 gaya kiosk) — ini TV, latar terang
-  // menyilaukan ruang tunggu. Tak satu pun punya tombol: tak ada yang memegang
-  // mouse di depan layar antrian.
+  // Ketiganya kini TERANG. Alasan lama ("TV, latar terang menyilaukan ruang
+  // tunggu") berlaku waktu papannya sendiri navy; begitu papan jadi terang,
+  // layar boot gelap justru jadi kilatan gelap sebelum papan muncul — persis
+  // masalah yang dulu dihindari, cuma terbalik arahnya. Tak satu pun punya
+  // tombol: tak ada yang memegang mouse di depan layar antrian.
   if (boot === 'notfound') {
     // Tak sembuh sendiri — manusia harus membetulkan URL-nya. Slug ditampilkan
     // besar supaya teknisi bisa membacanya dari seberang ruangan.
     return (
-      <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center gap-4 p-8 text-center">
+      <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col items-center justify-center gap-4 p-8 text-center">
         <AlertTriangle className="w-16 h-16 text-amber-500" />
         <p className="text-2xl font-bold">Instansi tidak ditemukan</p>
-        <p className="text-slate-400">
+        <p className="text-slate-600">
           Alamat layar ini menunjuk ke instansi yang tidak terdaftar.
         </p>
-        <p className="mt-2 text-4xl font-mono font-bold text-slate-300">/{tenantSlug}</p>
+        <p className="mt-2 text-4xl font-mono font-bold text-slate-700">/{tenantSlug}</p>
       </div>
     );
   }
@@ -426,14 +446,14 @@ export default function DisplayBoard() {
     // membedakan secara visual selain kalimatnya. Spinner tetap berputar supaya
     // terbaca "sedang berusaha", bukan "mati".
     return (
-      <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center gap-4 p-8 text-center">
-        <Loader2 className="w-14 h-14 animate-spin text-slate-500" />
-        <p className="text-xl text-slate-300">
+      <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col items-center justify-center gap-4 p-8 text-center">
+        <Loader2 className="w-14 h-14 animate-spin text-slate-400" />
+        <p className="text-xl text-slate-600">
           {boot === 'offline' ? 'Menyambungkan ke server…' : 'Memuat layar antrian…'}
         </p>
         {/* Info diagnostik kecil — supaya teknisi tahu layar ini menunjuk ke
             mana tanpa perlu membuka DevTools di TV. */}
-        <p className="text-xs text-slate-600 font-mono mt-2">
+        <p className="text-xs text-slate-400 font-mono mt-2">
           {tenantSlug} · {process.env.NEXT_PUBLIC_API_URL ?? 'API tak dikonfigurasi'}
         </p>
       </div>
@@ -446,9 +466,15 @@ export default function DisplayBoard() {
     // nomor antrian + dua penghitung "menunggu" + indikator pengumuman
     // sekaligus. Tanpa ini digit berlebar beda bikin nomor bergeser-geser tiap
     // kali berganti — sangat kentara di layar besar.
-    <div className="min-h-screen bg-slate-900 flex flex-col font-sans overflow-hidden text-white tabular-nums">
-      {/* Header */}
-      <header className="px-10 py-5 flex items-center justify-between border-b border-white/10">
+    <div
+      className="min-h-screen bg-slate-50 bg-cover bg-center bg-no-repeat flex flex-col font-sans overflow-hidden text-slate-900 tabular-nums"
+      style={{ backgroundImage: `url(${backgroundUrl})` }}
+    >
+      {/* Header di BAR PUTIH SOLID selebar layar. Sengaja punya permukaan
+          sendiri, bukan duduk langsung di atas gambar latar: instansi bisa
+          mengunggah latar apa pun, dan keterbacaan judul/jam tidak boleh
+          bergantung pada gambar yang tak bisa kita kendalikan. */}
+      <header className="px-10 py-5 flex items-center justify-between bg-white shadow-sm">
         {/* Logo instansi SELALU tampil — di kedua mode. Sempat disembunyikan di
             mode wordmark dengan alasan "wordmark sudah lockup lengkap", tapi itu
             keliru: kiosk pun tetap menampilkan logo di sel kirinya dan wordmark
@@ -466,20 +492,15 @@ export default function DisplayBoard() {
               berubah dan composite key-nya ~11 nilai yang harus disinkronkan
               manual: biaya perawatan tanpa manfaat. */}
           {isWordmark ? (
-            // Plat putih WAJIB, tanpa syarat. Wordmark diasumsikan gelap-di-terang
-            // (dialog superadmin menerima JPEG dan mem-preview-nya di atas
-            // bg-slate-50), jadi di latar navy ia nyaris tak terlihat. Tanpa plat,
-            // aset JPEG opak justru tampil sebagai kotak putih bertepi keras —
-            // persis "kelihatan seperti bug". bg-white PENUH, bukan bg-white/90:
-            // transparansi di atas navy membirukan warna putih di dalam
-            // wordmark-nya sendiri.
-            <div className="bg-white rounded-2xl px-5 py-3 inline-flex items-center shadow-lg shadow-black/30">
-              <img
-                src={theme!.header_wordmark_url!}
-                alt={tenant?.name ?? ''}
-                className="h-14 w-auto object-contain"
-              />
-            </div>
+            // TANPA plat putih pembungkus. Versi navy dulu memerlukannya karena
+            // wordmark (artwork gelap-di-terang) nyaris hilang di latar gelap.
+            // Sekarang header sudah punya bar putih sendiri, jadi plat terpisah
+            // cuma jadi kotak putih di atas kotak putih.
+            <img
+              src={theme!.header_wordmark_url!}
+              alt={tenant?.name ?? ''}
+              className="h-14 w-auto object-contain"
+            />
           ) : (
             <div>
               {/* text-2xl dipertahankan (TIDAK menyalin text-3xl kiosk) — header
@@ -502,11 +523,11 @@ export default function DisplayBoard() {
         </div>
         {/* Tanggal di atas, jam di bawah — sama dengan header kiosk. */}
         <div className="text-right">
-          <p className="text-xs text-slate-400">{currentDate}</p>
+          <p className="text-xs text-slate-500">{currentDate}</p>
           {/* font-bold, BUKAN font-black: Quicksand berhenti di 700. Minta 900
               bikin browser memalsukan tebalnya (synthetic bold) dan bentuk
               bulatnya jadi rusak. */}
-          <p className="text-4xl font-rounded font-bold text-white tabular-nums mt-0.5">{currentTime}</p>
+          <p className="text-4xl font-rounded font-bold text-slate-900 tabular-nums mt-0.5">{currentTime}</p>
         </div>
       </header>
 
@@ -599,7 +620,7 @@ export default function DisplayBoard() {
                 const servingNow = qEntries.find(e => e.status === 'serving');
                 const waitingCount = qEntries.filter(e => e.status === 'waiting').length;
                 return (
-                  <div key={queue.id} className={`${R_SURFACE} bg-slate-800 border border-slate-700 p-4 flex items-center gap-3`}>
+                  <div key={queue.id} className={`${R_SURFACE} bg-white border border-slate-200 shadow-sm p-4 flex items-center gap-3`}>
                     {/* readableInk: `text-white` hardcoded gagal kontras di
                         SEMUA 7 warna antrian tersemai (2.49–4.23 vs ambang 4.5). */}
                     <div className="w-11 h-11 rounded-xl flex items-center justify-center font-black flex-shrink-0"
@@ -607,11 +628,11 @@ export default function DisplayBoard() {
                       {queue.service_code ?? queue.name.charAt(0)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs text-slate-400 truncate">{queue.display_name ?? queue.name}</p>
+                      <p className="text-xs text-slate-500 truncate">{queue.display_name ?? queue.name}</p>
                       <p className="font-black text-2xl">{servingNow ? servingNow.ticket_number : '---'}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-xl font-black text-slate-300">{waitingCount}</p>
+                      <p className="text-xl font-black text-slate-700">{waitingCount}</p>
                       <p className="text-[10px] text-slate-500">menunggu</p>
                     </div>
                   </div>
@@ -625,15 +646,16 @@ export default function DisplayBoard() {
                 supaya tak menyita tinggi layar saat tak dikonfigurasi. */}
             {sponsors.length > 0 && sponsorStrip}
             {/* Running text — ruang tetap di bawah (video digeser ke atas).
-                Pola INVERSI mengikuti desain acuan: badan putih dengan garis
-                merah tipis atas-bawah, bukan sebaliknya seperti dulu. Merah
-                sengaja tetap hardcoded (tak ikut warna instansi) — di sini ia
-                berfungsi sebagai penanda "informasi berjalan" yang seragam di
-                semua instansi, bukan elemen identitas. */}
-            <div className={`h-14 ${R_ELEMENT} bg-white flex items-center overflow-hidden flex-shrink-0 relative`}>
-              <div className="w-full h-[3px] bg-red-600 absolute top-0" />
+                Pola acuan yang BENAR: badan merah solid, garis putih tipis
+                atas-bawah, teks putih. Tahap 2 sempat memasang kebalikannya
+                (badan putih, garis merah) karena instruksi awalnya keliru. */}
+            <div
+              className={`h-14 ${R_ELEMENT} flex items-center overflow-hidden flex-shrink-0 relative`}
+              style={{ backgroundColor: MARQUEE_RED }}
+            >
+              <div className="w-full h-[3px] bg-white absolute top-0" />
               {marquee}
-              <div className="w-full h-[3px] bg-red-600 absolute bottom-0" />
+              <div className="w-full h-[3px] bg-white absolute bottom-0" />
             </div>
           </motion.div>
         ) : (
@@ -651,8 +673,8 @@ export default function DisplayBoard() {
             // menampilkan navy kosong melompong — terlihat seperti sistemnya
             // rusak, padahal cuma belum dikonfigurasi.
             <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center gap-3">
-              <Inbox className="w-16 h-16 text-slate-600" strokeWidth={1.5} />
-              <p className="text-2xl font-bold text-slate-400">Belum ada layanan aktif</p>
+              <Inbox className="w-16 h-16 text-slate-400" strokeWidth={1.5} />
+              <p className="text-2xl font-bold text-slate-700">Belum ada layanan aktif</p>
               <p className="text-slate-500">Silakan hubungi petugas.</p>
             </div>
           ) : (
@@ -721,31 +743,66 @@ export default function DisplayBoard() {
                         // gradiennya statis, cuma berhenti berputar.
                         animate={reduceMotion ? undefined : { scale: [1, 1.02, 1] }}
                         transition={reduceMotion ? undefined : { duration: 2, repeat: Infinity }}>
-                        {/* Magic conic border */}
+                        {/* Sapuan konik berputar. Warnanya kini readableInk,
+                            BUKAN warna antrean: kartunya sendiri sudah solid
+                            berwarna itu, jadi sapuan sewarna akan lenyap ke
+                            dalamnya. Tinta terbaca menjadikannya sorotan yang
+                            justru terlihat. */}
                         <motion.div className="absolute inset-[-150%]"
                           animate={reduceMotion ? undefined : { rotate: 360 }}
                           transition={reduceMotion ? undefined : { duration: 3, repeat: Infinity, ease: 'linear' }}
-                          style={{ background: `conic-gradient(from 0deg, transparent 0deg, ${queue.color_code ?? brand} 90deg, transparent 180deg, ${queue.color_code ?? brand} 270deg, transparent 360deg)` }}
+                          style={{ background: `conic-gradient(from 0deg, transparent 0deg, ${readableInk(queue.color_code ?? brand)} 90deg, transparent 180deg, ${readableInk(queue.color_code ?? brand)} 270deg, transparent 360deg)` }}
                         />
-                        {/* rounded-lg DISENGAJA lebih kecil dari pembungkusnya
+                        {/* Kartu SOLID warna antrean (dulu isinya navy dengan
+                            nomor berwarna). Di papan terang, nomor berwarna di
+                            atas kartu putih GAGAL kontras untuk 3 dari 5 palet
+                            (2.54–2.80); solid + readableInk dijamin terbaca
+                            untuk warna apa pun sekaligus jadi elemen paling
+                            menonjol — sesuai perannya.
+                            rounded-lg DISENGAJA lebih kecil dari pembungkusnya
                             (rounded-xl): radius dalam harus dikurangi setebal
                             padding 4px supaya lengkungannya sejajar. */}
                         <div className="relative rounded-lg flex flex-col items-center justify-center py-6 text-center"
-                          style={{ backgroundColor: BOARD_BG }}>
-                          <p className="text-xs text-slate-400 uppercase tracking-widest mb-1">DIPANGGIL</p>
-                          <p className="text-5xl font-black" style={{ color: queue.color_code ?? brand }}>{e.ticket_number}</p>
-                          {e.service_window && <p className="text-xs text-slate-400 mt-2">Loket {e.service_window}</p>}
+                          style={{
+                            backgroundColor: queue.color_code ?? brand,
+                            color: readableInk(queue.color_code ?? brand),
+                          }}>
+                          <p className="text-xs uppercase tracking-widest mb-1 opacity-90">DIPANGGIL</p>
+                          <p className="text-5xl font-black">{e.ticket_number}</p>
+                          {e.service_window && <p className="text-xs mt-2 opacity-90">Loket {e.service_window}</p>}
                         </div>
                       </motion.div>
                     ))}
 
-                    {/* Waiting entries */}
-                    {waiting.map((e, i) => (
-                      <div key={e.id} className={`rounded-xl px-4 py-3 text-center font-bold ${i === 0 && servingNow.length === 0 ? 'text-white' : 'bg-slate-800 text-slate-300'}`}
-                        style={i === 0 && servingNow.length === 0 ? { backgroundColor: `${queue.color_code ?? brand}40`, borderLeft: `3px solid ${queue.color_code ?? brand}` } : {}}>
-                        {e.ticket_number}
-                      </div>
-                    ))}
+                    {/* Chip antrean — SEMUA solid warna antrean dengan tinta
+                        otomatis (dulu slate-800 dengan satu chip ber-tint).
+                        Karena warnanya kini seragam, hierarki "berikutnya" tak
+                        bisa lagi lewat warna: chip teratas ditandai cincin
+                        setinta + bayangan, bukan warna berbeda. */}
+                    {waiting.map((e, i) => {
+                      const isNext = i === 0 && servingNow.length === 0;
+                      const ink = readableInk(queue.color_code ?? brand);
+                      return (
+                        <div
+                          key={e.id}
+                          // text-xl (bukan ukuran bawaan 16px) disengaja: pada
+                          // #8B5CF6 tinta terbaik cuma mencapai 4.23, sehingga
+                          // GAGAL ambang teks normal 4.5. 20px bold masuk
+                          // kategori "teks besar" WCAG (≥18.66px bold) yang
+                          // ambangnya 3.0 → lolos. Kebetulan juga memang lebih
+                          // pantas: ini nomor antrian yang dibaca dari seberang
+                          // ruangan, 16px terlalu kecil untuk TV.
+                          className={`${R_ELEMENT} px-4 py-3 text-center font-bold text-xl ${isNext ? 'shadow-lg' : ''}`}
+                          style={{
+                            backgroundColor: queue.color_code ?? brand,
+                            color: ink,
+                            ...(isNext ? { boxShadow: `inset 0 0 0 3px ${ink}` } : {}),
+                          }}
+                        >
+                          {e.ticket_number}
+                        </div>
+                      );
+                    })}
 
                     {servingNow.length === 0 && waiting.length === 0 && (
                       // flex-1 + justify-center: kolom tanpa antrian dulu cuma
@@ -753,7 +810,7 @@ export default function DisplayBoard() {
                       // menganga di bawahnya — terbaca seperti layar yang gagal
                       // memuat. Sekarang kotaknya mengisi tinggi kolom dan
                       // isinya di tengah, jadi terlihat memang sedang kosong.
-                      <div className={`${R_ELEMENT} bg-slate-800 border border-dashed border-slate-600 flex-1 min-h-0 flex flex-col items-center justify-center gap-2 text-slate-500 text-sm`}>
+                      <div className={`${R_ELEMENT} bg-white/80 border border-dashed border-slate-300 flex-1 min-h-0 flex flex-col items-center justify-center gap-2 text-slate-500 text-sm`}>
                         <Hourglass className="w-6 h-6" strokeWidth={1.5} />
                         Menunggu antrian
                       </div>
@@ -774,18 +831,18 @@ export default function DisplayBoard() {
                   const servingNow = qEntries.find(e => e.status === 'serving');
                   const waitingCount = qEntries.filter(e => e.status === 'waiting').length;
                   return (
-                    <div key={queue.id} className={`${R_SURFACE} bg-slate-800 border border-slate-700 p-4 flex items-center gap-4`}>
+                    <div key={queue.id} className={`${R_SURFACE} bg-white border border-slate-200 shadow-sm p-4 flex items-center gap-4`}>
                       {/* readableInk — sama seperti badge di fase media. */}
                       <div className="w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg flex-shrink-0"
                         style={{ backgroundColor: queue.color_code ?? brand, color: readableInk(queue.color_code ?? brand) }}>
                         {queue.service_code ?? queue.name.charAt(0)}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs text-slate-400 truncate">{queue.display_name ?? queue.name}</p>
+                        <p className="text-xs text-slate-500 truncate">{queue.display_name ?? queue.name}</p>
                         <p className="font-black text-2xl">{servingNow ? servingNow.ticket_number : '---'}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-2xl font-black text-slate-300">{waitingCount}</p>
+                        <p className="text-2xl font-black text-slate-700">{waitingCount}</p>
                         <p className="text-xs text-slate-500">menunggu</p>
                       </div>
                     </div>
@@ -793,36 +850,44 @@ export default function DisplayBoard() {
                 })}
               </div>
 
-              {/* Right: currently serving big display */}
-              <div className="col-span-8 flex flex-col gap-4">
-                <div className={`flex-grow ${R_SURFACE} bg-slate-800 border border-slate-700 flex flex-col items-center justify-center p-8 text-center`}>
-                  {serving.length > 0 ? (
-                    <>
-                      <p className="text-sm text-slate-400 uppercase tracking-widest mb-3">SEDANG DIPANGGIL</p>
-                      {serving.map(e => {
-                        const q = queues.find(q => q.id === e.queue_id);
-                        return (
-                          <div key={e.id} className="mb-4">
-                            <p className="text-9xl font-black" style={{ color: q?.color_code ?? brand }}>{e.ticket_number}</p>
-                            <p className="text-xl text-slate-300 mt-2">{q?.display_name ?? q?.name}</p>
-                            {e.service_window && <p className="text-slate-500 text-sm mt-1">Loket {e.service_window}</p>}
-                          </div>
-                        );
-                      })}
-                    </>
-                  ) : (
-                    // Dulu emoji 📢 — satu-satunya emoji di seluruh board, dan
-                    // ia jadi elemen terbesar di panel utama saat idle. Ikon
-                    // lucide dipakai supaya seragam dengan ikon lain di file ini
-                    // (Wrench/AlertTriangle/Info) dan bisa ikut warna & ketebalan
-                    // garis yang konsisten.
-                    <div className="flex flex-col items-center gap-4">
-                      <Megaphone className="w-20 h-20 text-slate-600" strokeWidth={1.5} />
-                      <p className="text-slate-400 text-2xl font-semibold">Belum ada panggilan</p>
-                      <p className="text-slate-500">Nomor akan tampil di sini saat dipanggil.</p>
-                    </div>
-                  )}
-                </div>
+              {/* Right: currently serving big display.
+                  Tiap panggilan jadi bloknya SENDIRI yang solid berwarna
+                  antreannya masing-masing — bukan satu panel solid berisi
+                  beberapa nomor. `serving` bisa memuat panggilan dari layanan
+                  BERBEDA sekaligus; satu warna panel untuk semuanya akan
+                  menampilkan nomor layanan B di atas warna layanan A, yang
+                  menyesatkan di layar yang justru memakai warna sebagai
+                  penanda layanan. Dengan flex-1, satu panggilan (kasus umum)
+                  otomatis mengisi seluruh panel dan terlihat persis seperti
+                  panel solid utuh. */}
+              <div className="col-span-8 flex flex-col gap-4 min-h-0">
+                {serving.length > 0 ? (
+                  serving.map(e => {
+                    const q = queues.find(q => q.id === e.queue_id);
+                    const c = q?.color_code ?? brand;
+                    const ink = readableInk(c);
+                    return (
+                      <div
+                        key={e.id}
+                        className={`${R_SURFACE} flex-1 min-h-0 flex flex-col items-center justify-center p-8 text-center shadow-lg`}
+                        style={{ backgroundColor: c, color: ink }}
+                      >
+                        <p className="text-sm uppercase tracking-widest mb-3 opacity-90">SEDANG DIPANGGIL</p>
+                        <p className="text-9xl font-black leading-none">{e.ticket_number}</p>
+                        <p className="text-xl mt-3 opacity-90">{q?.display_name ?? q?.name}</p>
+                        {e.service_window && <p className="text-sm mt-1 opacity-75">Loket {e.service_window}</p>}
+                      </div>
+                    );
+                  })
+                ) : (
+                  // Saat kosong panel jadi PUTIH: tak ada antrean tertentu yang
+                  // sedang diwakili, jadi tak ada warna yang tepat untuk dipakai.
+                  <div className={`flex-grow ${R_SURFACE} bg-white shadow-lg flex flex-col items-center justify-center p-8 text-center gap-4`}>
+                    <Megaphone className="w-20 h-20 text-slate-400" strokeWidth={1.5} />
+                    <p className="text-slate-600 text-2xl font-semibold">Belum ada panggilan</p>
+                    <p className="text-slate-500">Nomor akan tampil di sini saat dipanggil.</p>
+                  </div>
+                )}
               </div>
             </motion.div>
           )}
@@ -847,17 +912,18 @@ export default function DisplayBoard() {
 
       {/* Running text (split view, fase antrian) */}
       <AnimatePresence>
-        {/* Inversi sama dengan strip in-flow di fase media — lihat komentar di
+        {/* Pola sama dengan strip in-flow di fase media — lihat komentar di
             sana. transition sebelumnya TIDAK diisi sama sekali, sehingga `y`
             jatuh ke spring default framer: satu-satunya elemen di board ini
             yang memantul. */}
         {viewMode === 'split' && !showMedia && (
           <motion.div initial={{ y: 80 }} animate={{ y: 0 }} exit={{ y: 80 }}
             transition={SLIDE_TRANSITION}
-            className="fixed bottom-0 left-0 w-full h-14 bg-white flex items-center overflow-hidden z-50">
-            <div className="w-full h-[3px] bg-red-600 absolute top-0" />
+            className="fixed bottom-0 left-0 w-full h-14 flex items-center overflow-hidden z-50"
+            style={{ backgroundColor: MARQUEE_RED }}>
+            <div className="w-full h-[3px] bg-white absolute top-0" />
             {marquee}
-            <div className="w-full h-[3px] bg-red-600 absolute bottom-0" />
+            <div className="w-full h-[3px] bg-white absolute bottom-0" />
           </motion.div>
         )}
       </AnimatePresence>
@@ -871,12 +937,12 @@ export default function DisplayBoard() {
           tertutup strip di split view, dan menutupi tepi kanan strip in-flow di
           fase media. Dua elemen fixed ini jelas ditulis tanpa saling tahu. */}
       <div
-        className={`fixed right-4 z-40 flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-full px-3 py-1.5 ${
+        className={`fixed right-4 z-40 flex items-center gap-2 bg-white border border-slate-200 shadow-sm rounded-full px-3 py-1.5 ${
           viewMode === 'split' || showMedia ? 'bottom-[4.75rem]' : 'bottom-4'
         }`}
       >
-        <span className={`w-1.5 h-1.5 rounded-full ${wsConnected ? 'bg-emerald-500 animate-pulse' : 'bg-slate-500'}`} />
-        <span className="text-xs text-slate-400">
+        <span className={`w-1.5 h-1.5 rounded-full ${wsConnected ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+        <span className="text-xs text-slate-500">
           {wsConnected ? 'Live' : 'Polling'} · {viewMode === 'grid' ? 'Grid' : 'Split'}
         </span>
       </div>

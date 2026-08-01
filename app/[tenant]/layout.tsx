@@ -64,16 +64,12 @@ export default function TenantLayout({ children }: { children: ReactNode }) {
     // Tahan render konten publik sampai status diketahui, supaya tidak ada
     // kedipan halaman asli sebelum layar pemeliharaan muncul.
     if (maintenance === null) {
-      // Latar disesuaikan tujuan: display board itu TV bertema navy yang
-      // menyala terus. Placeholder terang bikin kilatan putih layar penuh tiap
-      // kali menyala dan tiap reload — menyilaukan ruang tunggu. Halaman
-      // pengunjung lain (kiosk/antrian/buku tamu) memang bertema terang, jadi
-      // tetap slate-50 supaya tak ada kilatan gelap di sana.
-      return (
-        <div
-          className={`min-h-screen ${/\/display(\/|$)/.test(pathname) ? 'bg-slate-900' : 'bg-slate-50'}`}
-        />
-      );
+      // Placeholder terang untuk SEMUA halaman pengunjung. Sempat dibedakan
+      // (navy khusus /display) waktu papan antrian masih bertema gelap;
+      // begitu papan itu ikut jadi terang, pembedaannya justru menciptakan
+      // kilatan gelap sebelum papan terang muncul — bug yang sama, arah
+      // terbalik. Sekarang seragam, jadi tak ada kilatan ke arah mana pun.
+      return <div className="min-h-screen bg-slate-50" />;
     }
     if (maintenance.active) {
       return <MaintenanceScreen message={maintenance.message} />;
