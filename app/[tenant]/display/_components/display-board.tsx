@@ -762,14 +762,23 @@ export default function DisplayBoard() {
                             rounded-lg DISENGAJA lebih kecil dari pembungkusnya
                             (rounded-xl): radius dalam harus dikurangi setebal
                             padding 4px supaya lengkungannya sejajar. */}
+                        {/* TANPA opacity pada label kecil ("DIPANGGIL"/"Loket").
+                            readableInk sudah pas-pasan untuk sebagian warna
+                            (mentok 4.23 di #8B5CF6, bahkan di kekuatan penuh) —
+                            teks kecil butuh ambang 4.5, bukan 3.0 seperti nomor
+                            besar. Opacity-90 yang tadinya dipasang di sini
+                            menurunkan #3B82F6 dari 4.85 (lolos) jadi 4.31
+                            (gagal) tanpa manfaat hierarki apa pun, karena
+                            ukuran teks (text-xs vs text-5xl) sudah cukup
+                            membedakan mana judul mana isi. */}
                         <div className="relative rounded-lg flex flex-col items-center justify-center py-6 text-center"
                           style={{
                             backgroundColor: queue.color_code ?? brand,
                             color: readableInk(queue.color_code ?? brand),
                           }}>
-                          <p className="text-xs uppercase tracking-widest mb-1 opacity-90">DIPANGGIL</p>
+                          <p className="text-xs uppercase tracking-widest mb-1">DIPANGGIL</p>
                           <p className="text-5xl font-black">{e.ticket_number}</p>
-                          {e.service_window && <p className="text-xs mt-2 opacity-90">Loket {e.service_window}</p>}
+                          {e.service_window && <p className="text-xs mt-2">Loket {e.service_window}</p>}
                         </div>
                       </motion.div>
                     ))}
@@ -872,10 +881,17 @@ export default function DisplayBoard() {
                         className={`${R_SURFACE} flex-1 min-h-0 flex flex-col items-center justify-center p-8 text-center shadow-lg`}
                         style={{ backgroundColor: c, color: ink }}
                       >
-                        <p className="text-sm uppercase tracking-widest mb-3 opacity-90">SEDANG DIPANGGIL</p>
+                        {/* TANPA opacity — sama alasannya dengan kartu grid:
+                            "Loket X" di text-sm + opacity-75 adalah kombinasi
+                            terburuk yang terukur (turun sampai ~3.4-3.1 untuk
+                            #3B82F6/#8B5CF6, di bawah ambang teks kecil 4.5 dan
+                            nyaris menyentuh ambang keras 3.0). Ukuran font
+                            (text-sm/xl vs text-9xl) sudah cukup jadi penanda
+                            hierarki tanpa perlu memudarkan tinta. */}
+                        <p className="text-sm uppercase tracking-widest mb-3">SEDANG DIPANGGIL</p>
                         <p className="text-9xl font-black leading-none">{e.ticket_number}</p>
-                        <p className="text-xl mt-3 opacity-90">{q?.display_name ?? q?.name}</p>
-                        {e.service_window && <p className="text-sm mt-1 opacity-75">Loket {e.service_window}</p>}
+                        <p className="text-xl mt-3">{q?.display_name ?? q?.name}</p>
+                        {e.service_window && <p className="text-sm mt-1">Loket {e.service_window}</p>}
                       </div>
                     );
                   })
