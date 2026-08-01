@@ -540,40 +540,63 @@ export default function TenantsPage() {
                                   Gambar Wordmark
                                 </Button>
                               </div>
-                              <div className="flex items-center gap-3 pt-1">
-                                <div className="w-28 h-14 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden flex-shrink-0">
-                                  {headerWordmarkUrl ? (
-                                    <img src={headerWordmarkUrl} alt="Wordmark kiosk" className="w-full h-full object-contain" />
-                                  ) : (
-                                    <ImageIcon className="w-5 h-5 text-slate-300" />
+                              {/* Kontrol unggah HANYA muncul di mode Gambar
+                                  Wordmark — sama seperti perbaikan di tab
+                                  Tampilan Display: tadinya tombol unggah
+                                  tampil di kedua mode, membingungkan karena di
+                                  mode Teks Otomatis tak ada yang perlu
+                                  diunggah. Menyembunyikannya tidak menghapus
+                                  wordmark yang sudah ada — URL-nya tetap
+                                  tersimpan dan muncul lagi begitu mode
+                                  dikembalikan ke Gambar Wordmark. */}
+                              {themeFormData.header_mode === 'generated' ? (
+                                <p className="text-xs text-slate-500 pt-1">
+                                  Memakai nama instansi sebagai judul.
+                                  {headerWordmarkUrl && ' Wordmark yang sudah diunggah tetap tersimpan.'}
+                                </p>
+                              ) : (
+                                <>
+                                  <div className="flex items-center gap-3 pt-1">
+                                    <div className="w-28 h-14 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden flex-shrink-0">
+                                      {headerWordmarkUrl ? (
+                                        <img src={headerWordmarkUrl} alt="Wordmark kiosk" className="w-full h-full object-contain" />
+                                      ) : (
+                                        <ImageIcon className="w-5 h-5 text-slate-300" />
+                                      )}
+                                    </div>
+                                    <div className="flex flex-col gap-1.5 flex-1">
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => wordmarkInputRef.current?.click()}
+                                        disabled={wordmarkBusy}
+                                        className="text-xs border-slate-200 gap-2 justify-center"
+                                      >
+                                        {wordmarkBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                                        {headerWordmarkUrl ? 'Ganti Wordmark' : 'Unggah Wordmark'}
+                                      </Button>
+                                      {headerWordmarkUrl && (
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={handleRemoveWordmark}
+                                          disabled={wordmarkBusy}
+                                          className="text-xs border-slate-200 text-red-600 hover:text-red-700 justify-center"
+                                        >
+                                          Hapus
+                                        </Button>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {!headerWordmarkUrl && (
+                                    <p className="text-xs text-slate-400">
+                                      Belum ada wordmark diunggah — judul sementara memakai nama instansi.
+                                    </p>
                                   )}
-                                </div>
-                                <div className="flex flex-col gap-1.5 flex-1">
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => wordmarkInputRef.current?.click()}
-                                    disabled={wordmarkBusy}
-                                    className="text-xs border-slate-200 gap-2 justify-center"
-                                  >
-                                    {wordmarkBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                                    {headerWordmarkUrl ? 'Ganti Wordmark' : 'Unggah Wordmark'}
-                                  </Button>
-                                  {headerWordmarkUrl && (
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={handleRemoveWordmark}
-                                      disabled={wordmarkBusy}
-                                      className="text-xs border-slate-200 text-red-600 hover:text-red-700 justify-center"
-                                    >
-                                      Hapus
-                                    </Button>
-                                  )}
-                                </div>
-                              </div>
+                                </>
+                              )}
                               <input
                                 ref={wordmarkInputRef}
                                 type="file"
