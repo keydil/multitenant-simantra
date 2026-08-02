@@ -119,7 +119,7 @@ export function TenantsTable({
                             className="cursor-pointer flex items-center gap-2"
                           >
                             <Edit className="h-4 w-4" />
-                            <span>Edit</span>
+                            <span>Ubah</span>
                           </DropdownMenuItem>
                           {tenant.is_active ? (
                             <DropdownMenuItem

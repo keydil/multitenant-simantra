@@ -212,7 +212,7 @@ export default function AdminVisitPurposesPage() {
                           <Button variant="ghost" size="sm" onClick={() => toggleActive(p)} title={p.is_active ? 'Nonaktifkan' : 'Aktifkan'} className="h-8 w-8 p-0 hover:bg-slate-100 rounded-lg">
                             {p.is_active ? <Eye className="w-3.5 h-3.5 text-slate-400" /> : <EyeOff className="w-3.5 h-3.5 text-slate-400" />}
                           </Button>
-                          <Button variant="ghost" size="sm" onClick={() => openDialog(p)} title="Edit" className="h-8 w-8 p-0 hover:bg-slate-100 rounded-lg">
+                          <Button variant="ghost" size="sm" onClick={() => openDialog(p)} title="Edit kategori" className="h-8 w-8 p-0 hover:bg-slate-100 rounded-lg">
                             <Edit2 className="w-3.5 h-3.5 text-slate-400" />
                           </Button>
                           <Button variant="ghost" size="sm" onClick={() => handleDelete(p)} title="Hapus" className="h-8 w-8 p-0 hover:bg-red-50 rounded-lg">

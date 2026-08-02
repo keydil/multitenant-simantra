@@ -97,8 +97,8 @@ export default function AdminOperatorsPage() {
       }
       setIsOpen(false);
       await fetchOperators();
-    } catch (err: any) {
-      toast.error(`Gagal menyimpan: ${err.message}`);
+    } catch (err) {
+      toast.error('Gagal menyimpan', { description: friendlyErrorMessage(err) });
     } finally {
       setIsSaving(false);
     }

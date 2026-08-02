@@ -87,8 +87,8 @@ export default function AdminCountersPage() {
       }
       setIsOpen(false);
       await fetchQueues();
-    } catch (err: any) {
-      toast.error(`Gagal menyimpan: ${err.message}`);
+    } catch (err) {
+      toast.error('Gagal menyimpan', { description: friendlyErrorMessage(err) });
     } finally {
       setIsSaving(false);
     }
