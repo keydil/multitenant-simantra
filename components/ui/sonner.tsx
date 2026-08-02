@@ -33,6 +33,16 @@ const Toaster = ({ theme = 'light', ...props }: ToasterProps) => {
           toast: 'rounded-xl border border-slate-200 shadow-lg',
           title: 'text-sm font-semibold text-slate-900',
           description: 'text-xs text-slate-500',
+          // Warna semantik per tipe (bukan warna brand tenant) — konsisten
+          // dgn prinsip yang sudah dipakai StatCard/STATUS_BADGE di seluruh
+          // app: brand cuma untuk elemen navigasi/dekoratif, status semantik
+          // (selesai/gagal/dst) selalu warna tetap supaya sama di semua
+          // instansi (lihat audit UI §4). Palet sama persis dgn kotak notice
+          // di halaman login (bg-*-50/border-*-100/text-*-700).
+          success: 'border-emerald-200 bg-emerald-50 [&_[data-title]]:text-emerald-800 [&_[data-description]]:text-emerald-700 [&_[data-icon]]:text-emerald-600',
+          error: 'border-red-200 bg-red-50 [&_[data-title]]:text-red-800 [&_[data-description]]:text-red-700 [&_[data-icon]]:text-red-600',
+          warning: 'border-amber-200 bg-amber-50 [&_[data-title]]:text-amber-800 [&_[data-description]]:text-amber-700 [&_[data-icon]]:text-amber-600',
+          info: 'border-blue-200 bg-blue-50 [&_[data-title]]:text-blue-800 [&_[data-description]]:text-blue-700 [&_[data-icon]]:text-blue-600',
         },
       }}
       {...props}
