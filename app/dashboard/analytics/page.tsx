@@ -63,34 +63,36 @@ export default function AnalyticsPage() {
         subtitle="Statistik dan performa antrian"
         size="lg"
         actions={
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleAggregate}
-              disabled={isAggregating}
-              className="flex items-center gap-2 px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-              title="Hitung ulang statistik dari data antrian 30 hari terakhir"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isAggregating ? 'animate-spin' : ''}`} />
-              {isAggregating ? 'Memperbarui...' : 'Perbarui data'}
-            </button>
-            <select
-              value={selectedTenantId}
-              onChange={(e) => setSelectedTenantId(e.target.value)}
-              className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
-            >
-              {tenants.map((tenant) => (
-                <option key={tenant.id} value={tenant.id}>{tenant.name}</option>
-              ))}
-            </select>
-          </div>
+          <button
+            onClick={handleAggregate}
+            disabled={isAggregating}
+            className="flex items-center gap-2 px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            title="Hitung ulang statistik dari data antrian 30 hari terakhir"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isAggregating ? 'animate-spin' : ''}`} />
+            {isAggregating ? 'Memperbarui...' : 'Perbarui data'}
+          </button>
         }
       />
 
       <TenantComparisonAnalytics key={`comparison-${refreshKey}`} />
 
-      <div className="border-t border-slate-200 pt-6 space-y-1">
-        <h2 className="text-lg font-semibold text-slate-900">Detail per Instansi</h2>
-        <p className="text-sm text-slate-400 mb-4">Statistik dan tren mendalam untuk satu instansi</p>
+      <div className="border-t border-slate-200 pt-6 space-y-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Detail per Instansi</h2>
+            <p className="text-sm text-slate-400 mt-0.5">Statistik dan tren mendalam untuk satu instansi</p>
+          </div>
+          <select
+            value={selectedTenantId}
+            onChange={(e) => setSelectedTenantId(e.target.value)}
+            className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 flex-shrink-0"
+          >
+            {tenants.map((tenant) => (
+              <option key={tenant.id} value={tenant.id}>{tenant.name}</option>
+            ))}
+          </select>
+        </div>
         {selectedTenantId && (
           <TenantAnalytics key={`${selectedTenantId}-${refreshKey}`} tenantId={selectedTenantId} />
         )}
