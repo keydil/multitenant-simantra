@@ -11,6 +11,7 @@ import {
   Megaphone,
   Palette,
   Activity,
+  FileText,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth/auth-context';
 import { AppSidebar, type SidebarNavGroup } from '@/components/app-sidebar';
@@ -28,6 +29,7 @@ const navigation: SidebarNavGroup[] = [
     items: [
       { name: 'Kelola Antrian', href: '/dashboard/queue-management', icon: Building2 },
       { name: 'Analitik', href: '/dashboard/analytics', icon: BarChart3 },
+      { name: 'Rekap Antrean', href: '/dashboard/queue-recap', icon: FileText },
       { name: 'Pengguna', href: '/dashboard/users', icon: Users },
       { name: 'Pengumuman', href: '/dashboard/announcements', icon: Megaphone },
     ],

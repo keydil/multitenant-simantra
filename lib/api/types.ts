@@ -74,6 +74,20 @@ export interface QueueEntry {
 /** Bentuk publik (display board/kiosk) — tanpa customer_name & notes. */
 export type PublicQueueEntry = Omit<QueueEntry, 'customer_name' | 'notes' | 'priority'>;
 
+/** Baris laporan rekapitulasi — QueueEntry + nama layanan (join Queue di backend). */
+export interface QueueEntryRecap extends QueueEntry {
+  queue_name: string;
+}
+
+/** Ringkasan angka laporan rekap — dihitung backend atas SELURUH filter, bukan
+ *  cuma halaman yang ditarik. */
+export interface QueueRecapSummary {
+  by_status: Record<QueueEntryStatus, number>;
+  by_service: { queue_id: string; queue_name: string; count: number }[];
+  average_service_minutes: number | null;
+  total_entries: number;
+}
+
 export interface Announcement {
   id: string;
   title: string;

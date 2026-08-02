@@ -6,7 +6,7 @@ import { useAuth } from '@/lib/auth/auth-context';
 import { publicQueries } from '@/lib/api/queries';
 import {
   LayoutDashboard, Users, ListOrdered, ListChecks,
-  BookOpen, Settings, BarChart3,
+  BookOpen, Settings, BarChart3, FileText,
 } from 'lucide-react';
 import { AppSidebar, type SidebarNavGroup } from '@/components/app-sidebar';
 import { AnnouncementBell } from '@/components/announcement-bell';
@@ -36,6 +36,7 @@ const getNav = (slug: string): SidebarNavGroup[] => [
       { name: 'Kelola Keperluan', href: `/${slug}/admin/visit-purposes`, icon: ListChecks },
       { name: 'Kelola Operator', href: `/${slug}/admin/operators`, icon: Users },
       { name: 'Analitik', href: `/${slug}/admin/analytics`, icon: BarChart3 },
+      { name: 'Rekap Antrean', href: `/${slug}/admin/queue-recap`, icon: FileText },
     ],
   },
   {

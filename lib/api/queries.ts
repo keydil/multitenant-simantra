@@ -11,7 +11,9 @@ import type {
   PublicQueueEntry,
   Queue,
   QueueEntry,
+  QueueEntryRecap,
   QueueEntryStatus,
+  QueueRecapSummary,
   QueueStatsToday,
   QueueStatusSummary,
   Sponsor,
@@ -166,6 +168,21 @@ export const queueEntryQueries = {
   callNext: (queueId: string, serviceWindow?: number) =>
     api.post<QueueEntry>(`/queues/${queueId}/call-next`,
       serviceWindow !== undefined ? { service_window: serviceWindow } : {}),
+
+  /** Laporan rekapitulasi periode — data mentah terpaginasi + ringkasan angka
+   *  (dihitung backend atas seluruh filter). from/to wajib, rentang maks 92
+   *  hari (ditolak backend kalau lebih). limit maks 100/halaman. */
+  getRecap: (tenantId: string, opts: {
+    from: string; to: string; queue_id?: string; status?: string; page?: number; limit?: number;
+  }) => {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(opts)) {
+      if (v !== undefined && v !== '') params.set(k, String(v));
+    }
+    return api.get<{ data: QueueEntryRecap[]; count: number; page: number; limit: number; summary: QueueRecapSummary }>(
+      `/tenants/${tenantId}/entries/recap?${params.toString()}`
+    );
+  },
 };
 
 // ============================================================================
