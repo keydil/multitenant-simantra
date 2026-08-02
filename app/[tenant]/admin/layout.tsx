@@ -150,9 +150,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       {/* Main */}
       <main className="flex-1 min-w-0 overflow-auto">
         <div className="h-px w-full" style={{ background: `linear-gradient(90deg, transparent, ${color}, transparent)` }} />
-        <div className="p-6 lg:p-8 max-w-6xl mx-auto">
+        <div className="p-6 lg:p-8 max-w-7xl mx-auto">
           {tenant?.id && (
-            <div className="flex justify-end mb-4">
+            <div className="flex justify-end mb-2">
               <AnnouncementBell tenantId={tenant.id} brandColor={color} />
             </div>
           )}

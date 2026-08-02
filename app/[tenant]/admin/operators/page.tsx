@@ -7,8 +7,14 @@ import { friendlyErrorMessage } from '@/lib/api/errors';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import { PageHeader } from '@/components/ui/page-header';
 import { useTenant } from '@/hooks/use-tenant';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
-  Plus, Edit2, Trash2, Loader2, Mail, Shield, User, RotateCcw,
+  Plus, Edit2, Trash2, Loader2, Mail, User, RotateCcw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -152,14 +158,10 @@ export default function AdminOperatorsPage() {
         title="Kelola Operator"
         subtitle="Atur petugas dan admin instansi"
         actions={
-          <button
-            onClick={() => openDialog()}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-white transition-all hover:opacity-90 active:scale-95"
-            style={{ background: brand }}
-          >
+          <Button onClick={() => openDialog()} className="gap-2 text-white text-sm rounded-lg" style={{ background: brand }}>
             <Plus className="w-4 h-4" />
             Tambah Petugas
-          </button>
+          </Button>
         }
       />
 
@@ -179,146 +181,180 @@ export default function AdminOperatorsPage() {
       </div>
 
       {/* Operator List */}
-      {operators.length === 0 ? (
-        <div className="text-center py-16">
-          <User className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-          <p className="text-sm text-slate-400">Belum ada petugas. Tambahkan satu untuk memulai.</p>
-        </div>
-      ) : (
-        <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100">
-          {operators.map((op) => (
-            <div key={op.id} className={`flex items-center justify-between px-5 py-4 hover:bg-slate-50/50 transition-colors ${op.is_active ? '' : 'opacity-60'}`}>
-              <div className="flex items-center gap-3">
-                <div
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-semibold"
-                  style={{ background: op.is_active ? brand : '#94a3b8' }}
-                >
-                  {(op.full_name || op.email).slice(0, 2).toUpperCase()}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium text-slate-800">{op.full_name || '(Tanpa nama)'}</p>
-                    {!op.is_active && (
-                      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
-                        Nonaktif
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-slate-400">
-                    <Mail className="w-3 h-3" />
-                    {op.email}
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                {roleBadge(op.role)}
-                <button onClick={() => openDialog(op)} title="Edit petugas" className="p-2 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
-                  <Edit2 className="w-3.5 h-3.5" />
-                </button>
-                {op.is_active ? (
-                  <button onClick={() => handleDelete(op)} title="Nonaktifkan petugas" className="p-2 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                ) : (
-                  <button onClick={() => handleReactivate(op)} title="Aktifkan kembali" className="p-2 rounded-lg hover:bg-emerald-50 text-slate-400 hover:text-emerald-600 transition-colors">
-                    <RotateCcw className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
+      <Card className="border border-slate-200 bg-white rounded-xl">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold text-slate-800">Petugas</CardTitle>
+          <CardDescription className="text-xs text-slate-400">{operators.length} akun terdaftar</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {operators.length === 0 ? (
+            <div className="text-center py-10 text-sm text-slate-400">
+              <User className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+              Belum ada petugas. Tambahkan satu untuk memulai.
             </div>
-          ))}
-        </div>
-      )}
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-slate-100 hover:bg-transparent">
+                    <TableHead className="text-xs font-semibold text-slate-500">Nama</TableHead>
+                    <TableHead className="text-xs font-semibold text-slate-500">Email</TableHead>
+                    <TableHead className="text-xs font-semibold text-slate-500">Role</TableHead>
+                    <TableHead className="text-xs font-semibold text-slate-500">Status</TableHead>
+                    <TableHead className="text-xs font-semibold text-slate-500 text-right">Aksi</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {operators.map((op) => (
+                    <TableRow key={op.id} className={`border-slate-100 hover:bg-slate-50/50 ${op.is_active ? '' : 'opacity-60'}`}>
+                      <TableCell>
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-semibold flex-shrink-0"
+                            style={{ background: op.is_active ? brand : '#94a3b8' }}
+                          >
+                            {(op.full_name || op.email).slice(0, 2).toUpperCase()}
+                          </div>
+                          <p className="text-sm font-medium text-slate-800">{op.full_name || '(Tanpa nama)'}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5 text-sm text-slate-600">
+                          <Mail className="w-3.5 h-3.5 text-slate-400" />
+                          {op.email}
+                        </div>
+                      </TableCell>
+                      <TableCell>{roleBadge(op.role)}</TableCell>
+                      <TableCell>
+                        {op.is_active ? (
+                          <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            Aktif
+                          </span>
+                        ) : (
+                          <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
+                            Nonaktif
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => openDialog(op)} title="Edit petugas" className="h-8 w-8 p-0 hover:bg-slate-100 rounded-lg">
+                            <Edit2 className="w-3.5 h-3.5 text-slate-400" />
+                          </Button>
+                          {op.is_active ? (
+                            <Button variant="ghost" size="sm" onClick={() => handleDelete(op)} title="Nonaktifkan petugas" className="h-8 w-8 p-0 hover:bg-red-50 rounded-lg">
+                              <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                            </Button>
+                          ) : (
+                            <Button variant="ghost" size="sm" onClick={() => handleReactivate(op)} title="Aktifkan kembali" className="h-8 w-8 p-0 hover:bg-emerald-50 rounded-lg">
+                              <RotateCcw className="w-3.5 h-3.5 text-emerald-500" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Dialog */}
-      {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setIsOpen(false)}>
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl w-full max-w-md mx-4 p-6" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-base font-semibold text-slate-900 mb-1">
+      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <DialogContent className="bg-white rounded-2xl border border-slate-200">
+          <DialogHeader>
+            <DialogTitle className="text-slate-900">
               {editingOp ? 'Edit Petugas' : 'Tambah Petugas Baru'}
-            </h2>
-            <p className="text-xs text-slate-400 mb-5">Atur informasi dan peran petugas</p>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="text-xs font-medium text-slate-600 mb-1 block">Email</label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="petugas@instansi.go.id"
+            </DialogTitle>
+            <DialogDescription className="text-slate-400 text-sm">
+              Atur informasi dan peran petugas
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="email" className="text-sm font-medium text-slate-700">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                placeholder="petugas@instansi.go.id"
+                required
+                disabled={!!editingOp}
+                className="border-slate-200 text-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="full_name" className="text-sm font-medium text-slate-700">Nama Lengkap</Label>
+              <Input
+                id="full_name"
+                value={formData.full_name}
+                onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                placeholder="Nama lengkap petugas"
+                className="border-slate-200 text-sm"
+              />
+            </div>
+            {!editingOp && (
+              <div className="space-y-1.5">
+                <Label htmlFor="password" className="text-sm font-medium text-slate-700">Password Sementara</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  placeholder="Minimal 8 karakter"
                   required
-                  className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                  minLength={8}
+                  className="border-slate-200 text-sm"
                 />
+                <p className="text-xs text-slate-400">
+                  Petugas akan diwajibkan mengganti password ini saat login pertama.
+                </p>
               </div>
-              <div>
-                <label className="text-xs font-medium text-slate-600 mb-1 block">Nama Lengkap</label>
-                <input
-                  value={formData.full_name}
-                  onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                  placeholder="Nama lengkap petugas"
-                  className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
-                />
+            )}
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium text-slate-700">Role</Label>
+              <div className="flex gap-2">
+                {[
+                  { val: 'operator', label: 'Operator', desc: 'Petugas loket' },
+                  { val: 'admin', label: 'Admin', desc: 'Pengelola instansi' },
+                ].map(({ val, label, desc }) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, role: val })}
+                    className={`flex-1 p-3 rounded-xl border text-left transition-all ${
+                      formData.role === val
+                        ? 'border-transparent ring-2 text-white'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                    }`}
+                    style={formData.role === val ? { background: brand } : {}}
+                  >
+                    <p className="text-sm font-medium">{label}</p>
+                    <p className={`text-[10px] mt-0.5 ${formData.role === val ? 'text-white/70' : 'text-slate-400'}`}>{desc}</p>
+                  </button>
+                ))}
               </div>
-              {!editingOp && (
-                <div>
-                  <label className="text-xs font-medium text-slate-600 mb-1 block">Password Sementara</label>
-                  <input
-                    type="password"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    placeholder="Minimal 8 karakter"
-                    required
-                    minLength={8}
-                    className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-1">
-                    Petugas akan diwajibkan mengganti password ini saat login pertama.
-                  </p>
-                </div>
-              )}
-              <div>
-                <label className="text-xs font-medium text-slate-600 mb-1 block">Role</label>
-                <div className="flex gap-2">
-                  {[
-                    { val: 'operator', label: 'Operator', desc: 'Petugas loket' },
-                    { val: 'admin', label: 'Admin', desc: 'Pengelola instansi' },
-                  ].map(({ val, label, desc }) => (
-                    <button
-                      key={val}
-                      type="button"
-                      onClick={() => setFormData({ ...formData, role: val })}
-                      className={`flex-1 p-3 rounded-xl border text-left transition-all ${
-                        formData.role === val
-                          ? 'border-transparent ring-2 text-white'
-                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                      }`}
-                      style={formData.role === val ? { background: brand } : {}}
-                    >
-                      <p className="text-sm font-medium">{label}</p>
-                      <p className={`text-[10px] mt-0.5 ${formData.role === val ? 'text-white/70' : 'text-slate-400'}`}>{desc}</p>
-                    </button>
-                  ))}
-                </div>
-              </div>
+            </div>
 
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setIsOpen(false)} className="px-4 py-2 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50">
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-4 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-60 flex items-center gap-2"
-                  style={{ background: brand }}
-                >
-                  {isSaving ? <><Loader2 className="w-4 h-4 animate-spin" /> Menyimpan...</> : editingOp ? 'Simpan' : 'Tambah'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setIsOpen(false)} className="text-sm border-slate-200">
+                Batal
+              </Button>
+              <Button
+                type="submit"
+                disabled={isSaving}
+                className="text-sm text-white"
+                style={{ background: brand }}
+              >
+                {isSaving ? <><Loader2 className="w-4 h-4 animate-spin mr-1" /> Menyimpan...</> : editingOp ? 'Simpan' : 'Tambah'}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -215,26 +215,26 @@ export default function GuestBookList({ tenantSlug, tenantId, brandColor, guests
             </div>
           ) : (
             guests.map(guest => (
-              <div key={guest.id} className="flex gap-5 p-5 hover:bg-slate-50/50 transition-colors">
+              <div key={guest.id} className="flex gap-4 p-4 hover:bg-slate-50/50 transition-colors">
                 <div className="flex-shrink-0">
                   {guest.photo_url ? (
-                    <img src={guest.photo_url} alt={guest.name} className="w-16 h-16 rounded-xl object-cover border border-slate-200" />
+                    <img src={guest.photo_url} alt={guest.name} className="w-14 h-14 rounded-xl object-cover border border-slate-200" />
                   ) : (
-                    <div className="w-16 h-16 bg-slate-100 rounded-xl flex items-center justify-center">
-                      <User size={28} className="text-slate-300" />
+                    <div className="w-14 h-14 bg-slate-100 rounded-xl flex items-center justify-center">
+                      <User size={24} className="text-slate-300" />
                     </div>
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <p className="font-semibold text-slate-900">{guest.name}</p>
+                  <div className="flex items-start justify-between gap-3 mb-1">
+                    <p className="font-semibold text-slate-900 text-sm">{guest.name}</p>
                     <span className="text-xs text-slate-400 flex-shrink-0">
                       {new Date(guest.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
                       {' '}·{' '}
                       {new Date(guest.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
                     </span>
                   </div>
-                  <div className="grid grid-cols-2 gap-3 text-sm mb-2">
+                  <div className="grid grid-cols-2 gap-2 text-sm mb-1.5">
                     <div><p className="text-xs text-slate-400">Instansi</p><p className="font-medium text-slate-700">{guest.institution}</p></div>
                     <div><p className="text-xs text-slate-400">No. Telepon</p><p className="font-medium text-slate-700">{guest.phone}</p></div>
                   </div>

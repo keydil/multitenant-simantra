@@ -7,6 +7,12 @@ import { friendlyErrorMessage } from '@/lib/api/errors';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import { PageHeader } from '@/components/ui/page-header';
 import { useTenant } from '@/hooks/use-tenant';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { VisitPurpose } from '@/lib/api/types';
 import {
   Plus, Edit2, Trash2, Loader2, ChevronUp, ChevronDown, ListChecks, Eye, EyeOff,
@@ -136,124 +142,135 @@ export default function AdminVisitPurposesPage() {
         title="Kelola Keperluan"
         subtitle="Atur pilihan keperluan kunjungan di form buku tamu"
         actions={
-          <button
-            onClick={() => openDialog()}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-white transition-all hover:opacity-90 active:scale-95"
-            style={{ background: brand }}
-          >
+          <Button onClick={() => openDialog()} className="gap-2 text-white text-sm rounded-lg" style={{ background: brand }}>
             <Plus className="w-4 h-4" />
             Tambah Kategori
-          </button>
+          </Button>
         }
       />
 
       {/* List */}
-      {purposes.length === 0 ? (
-        <div className="text-center py-16">
-          <ListChecks className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-          <p className="text-sm text-slate-400">Belum ada kategori. Tambahkan satu untuk memulai.</p>
-        </div>
-      ) : (
-        <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100">
-          {purposes.map((p, i) => (
-            <div key={p.id} className={`flex items-center gap-3 px-4 py-3 ${p.is_active ? '' : 'opacity-60'}`}>
-              {/* Reorder */}
-              <div className="flex flex-col">
-                <button
-                  onClick={() => move(i, -1)}
-                  disabled={i === 0 || reordering}
-                  className="p-0.5 text-slate-400 hover:text-slate-700 disabled:opacity-30 disabled:hover:text-slate-400"
-                  title="Naikkan"
-                >
-                  <ChevronUp className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => move(i, 1)}
-                  disabled={i === purposes.length - 1 || reordering}
-                  className="p-0.5 text-slate-400 hover:text-slate-700 disabled:opacity-30 disabled:hover:text-slate-400"
-                  title="Turunkan"
-                >
-                  <ChevronDown className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="flex-1 min-w-0 flex items-center gap-2">
-                <span className="text-sm font-medium text-slate-800 truncate">{p.label}</span>
-                {!p.is_active && (
-                  <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
-                    Nonaktif
-                  </span>
-                )}
-              </div>
-
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => toggleActive(p)}
-                  className="p-2 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
-                  title={p.is_active ? 'Nonaktifkan' : 'Aktifkan'}
-                >
-                  {p.is_active ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                </button>
-                <button
-                  onClick={() => openDialog(p)}
-                  className="p-2 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
-                  title="Edit"
-                >
-                  <Edit2 className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={() => handleDelete(p)}
-                  className="p-2 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors"
-                  title="Hapus"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
+      <Card className="border border-slate-200 bg-white rounded-xl">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold text-slate-800">Kategori Keperluan</CardTitle>
+          <CardDescription className="text-xs text-slate-400">{purposes.length} kategori dikonfigurasi</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {purposes.length === 0 ? (
+            <div className="text-center py-10 text-sm text-slate-400">
+              <ListChecks className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+              Belum ada kategori. Tambahkan satu untuk memulai.
             </div>
-          ))}
-        </div>
-      )}
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-slate-100 hover:bg-transparent">
+                    <TableHead className="text-xs font-semibold text-slate-500 w-10">Urutan</TableHead>
+                    <TableHead className="text-xs font-semibold text-slate-500">Nama Kategori</TableHead>
+                    <TableHead className="text-xs font-semibold text-slate-500">Status</TableHead>
+                    <TableHead className="text-xs font-semibold text-slate-500 text-right">Aksi</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {purposes.map((p, i) => (
+                    <TableRow key={p.id} className={`border-slate-100 hover:bg-slate-50/50 ${p.is_active ? '' : 'opacity-60'}`}>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <button
+                            onClick={() => move(i, -1)}
+                            disabled={i === 0 || reordering}
+                            className="p-0.5 text-slate-400 hover:text-slate-700 disabled:opacity-30 disabled:hover:text-slate-400"
+                            title="Naikkan"
+                          >
+                            <ChevronUp className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => move(i, 1)}
+                            disabled={i === purposes.length - 1 || reordering}
+                            className="p-0.5 text-slate-400 hover:text-slate-700 disabled:opacity-30 disabled:hover:text-slate-400"
+                            title="Turunkan"
+                          >
+                            <ChevronDown className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm font-medium text-slate-800">{p.label}</TableCell>
+                      <TableCell>
+                        {p.is_active ? (
+                          <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            Aktif
+                          </span>
+                        ) : (
+                          <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
+                            Nonaktif
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => toggleActive(p)} title={p.is_active ? 'Nonaktifkan' : 'Aktifkan'} className="h-8 w-8 p-0 hover:bg-slate-100 rounded-lg">
+                            {p.is_active ? <Eye className="w-3.5 h-3.5 text-slate-400" /> : <EyeOff className="w-3.5 h-3.5 text-slate-400" />}
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => openDialog(p)} title="Edit" className="h-8 w-8 p-0 hover:bg-slate-100 rounded-lg">
+                            <Edit2 className="w-3.5 h-3.5 text-slate-400" />
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleDelete(p)} title="Hapus" className="h-8 w-8 p-0 hover:bg-red-50 rounded-lg">
+                            <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Dialog */}
-      {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setIsOpen(false)}>
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl w-full max-w-md mx-4 p-6" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-base font-semibold text-slate-900 mb-1">
+      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <DialogContent className="bg-white rounded-2xl border border-slate-200">
+          <DialogHeader>
+            <DialogTitle className="text-slate-900">
               {editing ? 'Edit Kategori' : 'Tambah Kategori Baru'}
-            </h2>
-            <p className="text-xs text-slate-400 mb-5">Nama keperluan yang tampil sebagai pilihan di form buku tamu</p>
+            </DialogTitle>
+            <DialogDescription className="text-slate-400 text-sm">
+              Nama keperluan yang tampil sebagai pilihan di form buku tamu
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="label" className="text-sm font-medium text-slate-700">Nama Kategori</Label>
+              <Input
+                id="label"
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                placeholder="Contoh: Konsultasi Layanan"
+                autoFocus
+                required
+                maxLength={255}
+                className="border-slate-200 text-sm"
+              />
+            </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="text-xs font-medium text-slate-600 mb-1 block">Nama Kategori</label>
-                <input
-                  value={label}
-                  onChange={(e) => setLabel(e.target.value)}
-                  placeholder="Contoh: Konsultasi Layanan"
-                  autoFocus
-                  required
-                  maxLength={255}
-                  className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setIsOpen(false)} className="px-4 py-2 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50">
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-4 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-60 flex items-center gap-2"
-                  style={{ background: brand }}
-                >
-                  {isSaving ? <><Loader2 className="w-4 h-4 animate-spin" /> Menyimpan...</> : editing ? 'Simpan' : 'Tambah'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setIsOpen(false)} className="text-sm border-slate-200">
+                Batal
+              </Button>
+              <Button
+                type="submit"
+                disabled={isSaving}
+                className="text-sm text-white"
+                style={{ background: brand }}
+              >
+                {isSaving ? <><Loader2 className="w-4 h-4 animate-spin mr-1" /> Menyimpan...</> : editing ? 'Simpan' : 'Tambah'}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

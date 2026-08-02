@@ -7,9 +7,15 @@ import { friendlyErrorMessage } from '@/lib/api/errors';
 import { useConfirm } from '@/components/ui/confirm-dialog';
 import { PageHeader } from '@/components/ui/page-header';
 import { useTenant } from '@/hooks/use-tenant';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { Queue } from '@/lib/types/queue';
 import {
-  Plus, Edit2, Trash2, Clock, Hash, Loader2, CheckCircle, XCircle,
+  Plus, Edit2, Trash2, Clock, Hash, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -121,147 +127,182 @@ export default function AdminCountersPage() {
         title="Kelola Loket"
         subtitle="Atur jenis layanan dan loket antrian"
         actions={
-          <button
-            onClick={() => openDialog()}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-white transition-all hover:opacity-90 active:scale-95"
-            style={{ background: brand }}
-          >
+          <Button onClick={() => openDialog()} className="gap-2 text-white text-sm rounded-lg" style={{ background: brand }}>
             <Plus className="w-4 h-4" />
             Tambah Loket
-          </button>
+          </Button>
         }
       />
 
       {/* Queue List */}
-      {queues.length === 0 ? (
-        <div className="text-center py-16">
-          <Hash className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-          <p className="text-sm text-slate-400">Belum ada loket. Tambahkan satu untuk memulai.</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {queues.map((queue) => (
-            <div key={queue.id} className="bg-white border border-slate-200 rounded-xl p-5 hover:shadow-sm transition-shadow">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-bold"
-                    style={{ background: brand }}
-                  >
-                    {queue.service_code || '?'}
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">{queue.display_name || queue.name}</p>
-                    <p className="text-xs text-slate-400">{queue.name}</p>
-                  </div>
-                </div>
-                <div className="flex gap-1">
-                  <button onClick={() => openDialog(queue)} className="p-2 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
-                  <button onClick={() => handleDelete(queue)} className="p-2 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-              <div className="flex items-center gap-4 text-xs text-slate-500">
-                <span className="flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  {queue.estimated_service_time_minutes} menit/orang
-                </span>
-                <span>Kapasitas: {queue.max_capacity}</span>
-                <span className="flex items-center gap-1">
-                  {queue.is_active ? (
-                    <><CheckCircle className="w-3 h-3 text-emerald-500" /> Aktif</>
-                  ) : (
-                    <><XCircle className="w-3 h-3 text-slate-400" /> Nonaktif</>
-                  )}
-                </span>
-              </div>
+      <Card className="border border-slate-200 bg-white rounded-xl">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold text-slate-800">Loket Aktif</CardTitle>
+          <CardDescription className="text-xs text-slate-400">{queues.length} loket dikonfigurasi</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {queues.length === 0 ? (
+            <div className="text-center py-10 text-sm text-slate-400">
+              <Hash className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+              Belum ada loket. Tambahkan satu untuk memulai.
             </div>
-          ))}
-        </div>
-      )}
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-slate-100 hover:bg-transparent">
+                    <TableHead className="text-xs font-semibold text-slate-500">Nama</TableHead>
+                    <TableHead className="text-xs font-semibold text-slate-500">Kode</TableHead>
+                    <TableHead className="text-xs font-semibold text-slate-500">Kapasitas</TableHead>
+                    <TableHead className="text-xs font-semibold text-slate-500">
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5" />
+                        Estimasi Waktu
+                      </div>
+                    </TableHead>
+                    <TableHead className="text-xs font-semibold text-slate-500">Status</TableHead>
+                    <TableHead className="text-xs font-semibold text-slate-500 text-right">Aksi</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {queues.map((queue) => (
+                    <TableRow key={queue.id} className="border-slate-100 hover:bg-slate-50/50">
+                      <TableCell>
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+                            style={{ background: brand }}
+                          >
+                            {queue.service_code || '?'}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-slate-800">{queue.display_name || queue.name}</p>
+                            {queue.display_name && <p className="text-xs text-slate-400">{queue.name}</p>}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-xs font-mono font-semibold bg-slate-100 text-slate-600 px-2 py-1 rounded-md">
+                          {queue.service_code || '-'}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-sm text-slate-600">{queue.max_capacity}</TableCell>
+                      <TableCell className="text-sm text-slate-600">{queue.estimated_service_time_minutes} menit</TableCell>
+                      <TableCell>
+                        {queue.is_active ? (
+                          <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            Aktif
+                          </span>
+                        ) : (
+                          <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
+                            Nonaktif
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => openDialog(queue)} className="h-8 w-8 p-0 hover:bg-slate-100 rounded-lg">
+                            <Edit2 className="w-3.5 h-3.5 text-slate-400" />
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleDelete(queue)} className="h-8 w-8 p-0 hover:bg-red-50 rounded-lg">
+                            <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Dialog */}
-      {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setIsOpen(false)}>
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl w-full max-w-md mx-4 p-6" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-base font-semibold text-slate-900 mb-1">
+      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <DialogContent className="bg-white rounded-2xl border border-slate-200">
+          <DialogHeader>
+            <DialogTitle className="text-slate-900">
               {editingQueue ? 'Edit Loket' : 'Tambah Loket Baru'}
-            </h2>
-            <p className="text-xs text-slate-400 mb-5">Konfigurasi layanan dan estimasi waktu</p>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="text-xs font-medium text-slate-600 mb-1 block">Nama Loket</label>
-                <input
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Contoh: Pendaftaran Pasien"
-                  required
-                  className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+            </DialogTitle>
+            <DialogDescription className="text-slate-400 text-sm">
+              Konfigurasi layanan dan estimasi waktu
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="name" className="text-sm font-medium text-slate-700">Nama Loket</Label>
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Contoh: Pendaftaran Pasien"
+                className="border-slate-200 text-sm"
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="display_name" className="text-sm font-medium text-slate-700">Nama Tampilan</Label>
+              <Input
+                id="display_name"
+                value={formData.display_name}
+                onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
+                placeholder="Contoh: Registrasi"
+                className="border-slate-200 text-sm"
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="service_code" className="text-sm font-medium text-slate-700">Kode</Label>
+                <Input
+                  id="service_code"
+                  value={formData.service_code}
+                  onChange={(e) => setFormData({ ...formData, service_code: e.target.value.toUpperCase() })}
+                  placeholder="A"
+                  maxLength={2}
+                  className="border-slate-200 text-sm text-center font-bold"
                 />
               </div>
-              <div>
-                <label className="text-xs font-medium text-slate-600 mb-1 block">Nama Tampilan</label>
-                <input
-                  value={formData.display_name}
-                  onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
-                  placeholder="Contoh: Registrasi"
-                  className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+              <div className="space-y-1.5">
+                <Label htmlFor="max_capacity" className="text-sm font-medium text-slate-700">Kapasitas</Label>
+                <Input
+                  id="max_capacity"
+                  type="number"
+                  value={formData.max_capacity}
+                  onChange={(e) => setFormData({ ...formData, max_capacity: parseInt(e.target.value) || 100 })}
+                  min={1}
+                  className="border-slate-200 text-sm"
                 />
               </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-slate-600 mb-1 block">Kode</label>
-                  <input
-                    value={formData.service_code}
-                    onChange={(e) => setFormData({ ...formData, service_code: e.target.value.toUpperCase() })}
-                    placeholder="A"
-                    maxLength={2}
-                    className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-900 text-center font-bold placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-slate-600 mb-1 block">Kapasitas</label>
-                  <input
-                    type="number"
-                    value={formData.max_capacity}
-                    onChange={(e) => setFormData({ ...formData, max_capacity: parseInt(e.target.value) || 100 })}
-                    min={1}
-                    className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-slate-600 mb-1 block">Menit/Orang</label>
-                  <input
-                    type="number"
-                    value={formData.estimated_service_time_minutes}
-                    onChange={(e) => setFormData({ ...formData, estimated_service_time_minutes: parseInt(e.target.value) || 15 })}
-                    min={1}
-                    className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
-                  />
-                </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="service_time" className="text-sm font-medium text-slate-700">Menit/Orang</Label>
+                <Input
+                  id="service_time"
+                  type="number"
+                  value={formData.estimated_service_time_minutes}
+                  onChange={(e) => setFormData({ ...formData, estimated_service_time_minutes: parseInt(e.target.value) || 15 })}
+                  min={1}
+                  className="border-slate-200 text-sm"
+                />
               </div>
+            </div>
 
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setIsOpen(false)} className="px-4 py-2 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50">
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-4 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-60 flex items-center gap-2"
-                  style={{ background: brand }}
-                >
-                  {isSaving ? <><Loader2 className="w-4 h-4 animate-spin" /> Menyimpan...</> : editingQueue ? 'Simpan' : 'Tambah'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setIsOpen(false)} className="text-sm border-slate-200">
+                Batal
+              </Button>
+              <Button
+                type="submit"
+                disabled={isSaving}
+                className="text-sm text-white"
+                style={{ background: brand }}
+              >
+                {isSaving ? <><Loader2 className="w-4 h-4 animate-spin mr-1" /> Menyimpan...</> : editingQueue ? 'Simpan' : 'Tambah'}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
