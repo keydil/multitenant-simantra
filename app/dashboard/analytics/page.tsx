@@ -5,6 +5,7 @@ import { RefreshCw } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-header';
 import { useTenants } from '@/hooks/use-tenant-data';
 import { TenantAnalytics } from '@/components/tenant-analytics';
+import { TenantComparisonAnalytics } from '@/components/tenant-comparison-analytics';
 import { analyticsQueries } from '@/lib/api/queries';
 import { friendlyErrorMessage } from '@/lib/api/errors';
 import { toast } from 'sonner';
@@ -85,9 +86,15 @@ export default function AnalyticsPage() {
         }
       />
 
-      {selectedTenantId && (
-        <TenantAnalytics key={`${selectedTenantId}-${refreshKey}`} tenantId={selectedTenantId} />
-      )}
+      <TenantComparisonAnalytics key={`comparison-${refreshKey}`} />
+
+      <div className="border-t border-slate-200 pt-6 space-y-1">
+        <h2 className="text-lg font-semibold text-slate-900">Detail per Instansi</h2>
+        <p className="text-sm text-slate-400 mb-4">Statistik dan tren mendalam untuk satu instansi</p>
+        {selectedTenantId && (
+          <TenantAnalytics key={`${selectedTenantId}-${refreshKey}`} tenantId={selectedTenantId} />
+        )}
+      </div>
     </div>
   );
 }

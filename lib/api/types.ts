@@ -85,7 +85,22 @@ export interface QueueRecapSummary {
   by_status: Record<QueueEntryStatus, number>;
   by_service: { queue_id: string; queue_name: string; count: number }[];
   average_service_minutes: number | null;
+  average_wait_minutes: number | null;
   total_entries: number;
+}
+
+/** Baris perbandingan lintas-instansi (superadmin) — agregat analytics_daily
+ *  per tenant. attendance_rate dalam persen (0-100), bukan pecahan 0-1. */
+export interface TenantAnalyticsSummary {
+  tenant_id: string;
+  tenant_name: string;
+  tenant_slug: string;
+  total_entries: number;
+  completed_entries: number;
+  no_show_entries: number;
+  cancelled_entries: number;
+  average_service_minutes: number | null;
+  attendance_rate: number | null;
 }
 
 export interface Announcement {

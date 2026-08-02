@@ -18,6 +18,7 @@ import type {
   QueueStatusSummary,
   Sponsor,
   Tenant,
+  TenantAnalyticsSummary,
   TenantPurgePreview,
   TenantTheme,
   TenantUser,
@@ -222,6 +223,11 @@ export const analyticsQueries = {
    */
   aggregate: (days: number) =>
     api.post<{ days: number; upserted: number }>('/analytics/aggregate', { days }),
+
+  /** Perbandingan lintas-instansi (superadmin) — agregat analytics_daily per
+   *  tenant utk suatu rentang tanggal. */
+  getTenantsSummary: (from: string, to: string) =>
+    api.get<TenantAnalyticsSummary[]>(`/analytics/tenants-summary?from=${from}&to=${to}`),
 };
 
 // ============================================================================
