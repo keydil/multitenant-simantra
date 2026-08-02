@@ -175,6 +175,9 @@ export const queueEntryQueries = {
    *  hari (ditolak backend kalau lebih). limit maks 100/halaman. */
   getRecap: (tenantId: string, opts: {
     from: string; to: string; queue_id?: string; status?: string; page?: number; limit?: number;
+    /** Default backend 'desc' (terbaru dulu). Export loop kirim 'asc' eksplisit
+     *  supaya file tetap kronologis. */
+    order?: 'asc' | 'desc';
   }) => {
     const params = new URLSearchParams();
     for (const [k, v] of Object.entries(opts)) {

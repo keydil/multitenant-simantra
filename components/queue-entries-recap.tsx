@@ -2,9 +2,10 @@
 
 import { useEffect, useState, useCallback, type ReactNode } from 'react';
 import * as XLSX from 'xlsx-js-style';
-import { Download, ChevronLeft, ChevronRight, Loader2, FileText } from 'lucide-react';
+import { Download, Loader2, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/ui/page-header';
+import { PaginationControls } from '@/components/pagination-controls';
 import { queueEntryQueries, queueQueries } from '@/lib/api/queries';
 import { friendlyErrorMessage } from '@/lib/api/errors';
 import type { Queue, QueueEntryRecap, QueueEntryStatus, QueueRecapSummary } from '@/lib/api/types';
@@ -132,6 +133,10 @@ export function QueueEntriesRecap({ tenantId, tenantName, brandColor, adminName,
           queue_id: queueFilter || undefined,
           page: p,
           limit: 100,
+          // Preview (fetchPage di bawah) sengaja terbaru-dulu (default backend
+          // 'desc'), tapi file export tetap kronologis — konvensi laporan/ledger,
+          // dan kolom "No" di sheet jadi runtut dari entri paling awal.
+          order: 'asc',
         });
         if (p === 1) exportSummary = res.summary;
         rows.push(...res.data);
@@ -375,7 +380,7 @@ export function QueueEntriesRecap({ tenantId, tenantName, brandColor, adminName,
           <h2 className="text-sm font-semibold text-slate-800">Data Antrean</h2>
           <span className="text-xs bg-slate-100 text-slate-600 border border-slate-200 px-3 py-1 rounded-full font-medium">{count} entri</span>
         </div>
-        {loading ? (
+        {loading && entries.length === 0 ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
           </div>
@@ -386,7 +391,13 @@ export function QueueEntriesRecap({ tenantId, tenantName, brandColor, adminName,
             <p className="text-sm mt-1 text-slate-300">Coba ubah periode atau filter layanan</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          // loading tetap true saat pindah halaman DILAKUKAN SENGAJA tanpa
+          // mengganti tabel ke spinner — kalau diganti, tinggi kontainer
+          // kolaps mendadak (baris lama hilang, spinner jauh lebih pendek)
+          // dan browser "mengklem" posisi scroll krn sudah melebihi tinggi
+          // dokumen yang baru, terasa seperti lompat ke atas. Baris lama
+          // dipertahankan (redup) sampai data baru datang.
+          <div className={`overflow-x-auto transition-opacity ${loading ? 'opacity-50 pointer-events-none' : ''}`}>
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 text-left text-xs text-slate-500">
@@ -423,22 +434,7 @@ export function QueueEntriesRecap({ tenantId, tenantName, brandColor, adminName,
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-slate-500">Halaman {page} dari {totalPages}</p>
-          <div className="flex gap-2">
-            <button
-              disabled={page <= 1}
-              onClick={() => setPage((p) => p - 1)}
-              className="p-2 border border-slate-200 rounded-lg disabled:opacity-40 hover:bg-slate-50"
-            >
-              <ChevronLeft size={16} />
-            </button>
-            <button
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => p + 1)}
-              className="p-2 border border-slate-200 rounded-lg disabled:opacity-40 hover:bg-slate-50"
-            >
-              <ChevronRight size={16} />
-            </button>
-          </div>
+          <PaginationControls page={page} totalPages={totalPages} onPageChange={setPage} brandColor={brandColor} />
         </div>
       )}
     </div>

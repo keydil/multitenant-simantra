@@ -8,7 +8,8 @@ import { PageHeader } from '@/components/ui/page-header';
 import { toast } from 'sonner';
 import type { GuestBook } from '@/lib/api/types';
 import * as XLSX from 'xlsx-js-style';
-import { Download, ChevronDown, Search, X, User, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Download, ChevronDown, Search, X, User } from 'lucide-react';
+import { PaginationControls } from '@/components/pagination-controls';
 
 // Fallback KALAU fetch gagal / tenant lama belum di-backfill. Sumber utama:
 // kategori per-tenant dari GET /tenants/:id/guest-book/purposes.
@@ -249,28 +250,14 @@ export default function GuestBookList({ tenantSlug, tenantId, brandColor, guests
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-slate-500">Halaman {currentPage} dari {totalPages}</p>
-          <div className="flex gap-2">
-            <button disabled={currentPage <= 1} onClick={() => router.push(buildUrl({ page: currentPage - 1 }))}
-              className="p-2 border border-slate-200 rounded-lg disabled:opacity-40 hover:bg-slate-50">
-              <ChevronLeft size={16} />
-            </button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1)
-              .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
-              .map((p) => {
-                const active = currentPage === p;
-                return (
-                  <button key={p} onClick={() => router.push(buildUrl({ page: p }))}
-                    style={active ? { background: brand, borderColor: brand } : undefined}
-                    className={`w-9 h-9 rounded-lg text-sm font-medium border transition-all ${active ? 'text-white' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
-                    {p}
-                  </button>
-                );
-              })}
-            <button disabled={currentPage >= totalPages} onClick={() => router.push(buildUrl({ page: currentPage + 1 }))}
-              className="p-2 border border-slate-200 rounded-lg disabled:opacity-40 hover:bg-slate-50">
-              <ChevronRight size={16} />
-            </button>
-          </div>
+          {/* scroll:false — router.push default-nya scroll ke atas tiap
+              navigasi, mengganggu kalau user lagi baca bagian bawah list. */}
+          <PaginationControls
+            page={currentPage}
+            totalPages={totalPages}
+            onPageChange={(p) => router.push(buildUrl({ page: p }), { scroll: false })}
+            brandColor={brand}
+          />
         </div>
       )}
     </div>
