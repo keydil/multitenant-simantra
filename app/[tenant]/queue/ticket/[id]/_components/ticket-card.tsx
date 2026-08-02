@@ -20,6 +20,7 @@ export default function TicketCard() {
   const [entry, setEntry] = useState<QueueEntry | null>(null);
   const [queue, setQueue] = useState<Queue | null>(null);
   const [positionAhead, setPositionAhead] = useState(0);
+  const [estimatedWaitMinutes, setEstimatedWaitMinutes] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(15);
@@ -38,6 +39,7 @@ export default function TicketCard() {
       ]);
       if (queueData) setQueue(queueData as Queue);
       setPositionAhead(position?.ahead ?? 0);
+      setEstimatedWaitMinutes(position?.estimated_wait_minutes ?? null);
     } catch (err) {
       // 404 beneran = tiket tak ada; error lain (network/server down) TIDAK
       // boleh diklaim "tidak ditemukan" — tiketnya mungkin ada, server-nya
@@ -91,7 +93,6 @@ export default function TicketCard() {
   const statusUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/${tenantSlug}/queue/status/${entry.id}`
     : '';
-  const estWait = positionAhead * (queue.estimated_service_time_minutes ?? 5);
 
   return (
     <div className="min-h-screen bg-gray-100 print:bg-white print:min-h-0">
@@ -168,7 +169,7 @@ export default function TicketCard() {
               </p>
               <div className="flex gap-3 mt-2 justify-end text-xs text-slate-400 print:hidden">
                 <span>👥 {positionAhead} depan</span>
-                <span>⏱ ~{estWait} mnt</span>
+                <span>{estimatedWaitMinutes != null ? `⏱ ~${estimatedWaitMinutes} mnt` : '⏱ belum tersedia'}</span>
               </div>
             </div>
           </div>

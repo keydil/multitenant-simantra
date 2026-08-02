@@ -7,7 +7,7 @@ import { ApiError } from '@/lib/api/client';
 import { friendlyErrorMessage } from '@/lib/api/errors';
 import { useRealtime } from '@/hooks/use-realtime';
 import { useTenant } from '@/hooks/use-tenant';
-import type { QueueEntry, Queue, QueueStatus } from '@/lib/types/queue';
+import type { QueueEntry, QueueStatus } from '@/lib/types/queue';
 import { Clock, CheckCircle2, AlertCircle, Volume2, MapPin, Star, Loader2 } from 'lucide-react';
 
 type StatusConfig = {
@@ -71,8 +71,8 @@ export default function StatusCard() {
   const { tenant } = useTenant(tenantSlug);
 
   const [entry, setEntry] = useState<QueueEntry | null>(null);
-  const [queue, setQueue] = useState<Queue | null>(null);
   const [positionAhead, setPositionAhead] = useState(0);
+  const [estimatedWaitMinutes, setEstimatedWaitMinutes] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [greeting, setGreeting] = useState('Selamat Datang');
@@ -80,8 +80,9 @@ export default function StatusCard() {
 
   const updatePositionAhead = useCallback(async (e: QueueEntry) => {
     try {
-      const { ahead } = await publicQueries.getEntryPosition(e.id);
+      const { ahead, estimated_wait_minutes } = await publicQueries.getEntryPosition(e.id);
       setPositionAhead(ahead);
+      setEstimatedWaitMinutes(estimated_wait_minutes);
     } catch {
       // posisi gagal dimuat — pertahankan nilai lama
     }
@@ -112,11 +113,7 @@ export default function StatusCard() {
       setEntry(entryData);
       prevStatusRef.current = entryData.status as QueueStatus;
 
-      const [queueData] = await Promise.all([
-        publicQueries.getQueue(entryData.queue_id).catch(() => null),
-        updatePositionAhead(entryData),
-      ]);
-      if (queueData) setQueue(queueData as Queue);
+      await updatePositionAhead(entryData);
     } catch (err) {
       // 404 beneran = tiket tak ada; error lain (network/server down) TIDAK
       // boleh diklaim "tidak ditemukan" — tiketnya mungkin ada, server-nya
@@ -177,7 +174,7 @@ export default function StatusCard() {
     );
   }
 
-  if (!entry || !queue || !tenant) {
+  if (!entry || !tenant) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center p-8 bg-white rounded-2xl shadow">
@@ -191,7 +188,6 @@ export default function StatusCard() {
   const status = entry.status as QueueStatus;
   const cfg = STATUS_CONFIGS[status];
   const brand = tenant.brand_color ?? '#1e40af';
-  const estWait = positionAhead * (queue.estimated_service_time_minutes ?? 5);
 
   return (
     <div className="min-h-screen bg-slate-50 relative overflow-x-hidden pb-10">
@@ -233,7 +229,11 @@ export default function StatusCard() {
                 <p className="text-7xl font-black text-slate-800 tabular-nums">{positionAhead}</p>
                 <p className="text-slate-500 font-medium">Orang di depan Anda</p>
                 {positionAhead > 0 && (
-                  <p className="text-xs text-slate-400 mt-1">Estimasi tunggu ~{estWait} menit</p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    {estimatedWaitMinutes != null
+                      ? `Estimasi tunggu ~${estimatedWaitMinutes} menit`
+                      : 'Estimasi tunggu belum tersedia'}
+                  </p>
                 )}
               </div>
               <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-center">

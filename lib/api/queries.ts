@@ -301,8 +301,13 @@ export const publicQueries = {
   /** Lengkap termasuk customer_name — UUID entry = capability pemegang tiket. */
   getEntry: (id: string) => api.get<QueueEntry>(`/public/entries/${id}`, { auth: false }),
 
+  /** estimated_wait_minutes = ahead × rata-rata waktu layanan nyata (histori
+   *  14 hari); null kalau layanan itu belum punya histori sama sekali. */
   getEntryPosition: (id: string) =>
-    api.get<{ ahead: number }>(`/public/entries/${id}/position`, { auth: false }),
+    api.get<{ ahead: number; estimated_wait_minutes: number | null }>(
+      `/public/entries/${id}/position`,
+      { auth: false }
+    ),
 
   getQueue: (id: string) => api.get<Queue>(`/public/queues/${id}`, { auth: false }),
 
