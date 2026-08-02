@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuth } from '@/lib/auth/auth-context';
 import { friendlyErrorMessage } from '@/lib/api/errors';
 import { Eye, EyeOff, Loader2, AlertCircle, Activity, Clock } from 'lucide-react';
@@ -106,7 +107,12 @@ export default function SuperadminLoginPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-600">Password</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-medium text-slate-600">Password</label>
+                    <Link href="/auth/forgot-password" className="text-xs text-slate-400 hover:text-slate-600 transition-colors">
+                      Lupa Password?
+                    </Link>
+                  </div>
                   <div className="relative">
                     <input
                       type={showPassword ? 'text' : 'password'}

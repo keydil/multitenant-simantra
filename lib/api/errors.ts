@@ -11,6 +11,9 @@ export function friendlyErrorMessage(err: unknown): string {
     if (err.error === 'MUST_CHANGE_PASSWORD') {
       return 'Anda harus mengganti password terlebih dahulu sebelum melanjutkan.';
     }
+    if (err.error === 'INVALID_RESET_TOKEN') {
+      return 'Link reset tidak valid atau sudah kedaluwarsa. Silakan minta link baru.';
+    }
 
     switch (err.statusCode) {
       case 400:

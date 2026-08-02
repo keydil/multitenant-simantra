@@ -26,6 +26,23 @@ import type {
 } from './types';
 
 // ============================================================================
+// AUTH — forgot/reset password (login/logout/change-password ada di
+// lib/auth/auth-context.tsx, bukan di sini, karena butuh update state
+// AuthContext. Forgot/reset-password TIDAK — user belum login sama sekali.)
+// ============================================================================
+export const authQueries = {
+  forgotPassword: (email: string) =>
+    api.post<{ message: string }>('/auth/forgot-password', { email }, { auth: false }),
+
+  resetPassword: (token: string, new_password: string) =>
+    api.post<{ message: string; redirect_to: string }>(
+      '/auth/reset-password',
+      { token, new_password },
+      { auth: false },
+    ),
+};
+
+// ============================================================================
 // TENANTS (superadmin)
 // ============================================================================
 export const tenantQueries = {
