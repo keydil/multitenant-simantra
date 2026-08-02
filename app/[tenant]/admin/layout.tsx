@@ -9,9 +9,9 @@ import {
   BookOpen, Settings, BarChart3, FileText,
 } from 'lucide-react';
 import { AppSidebar, type SidebarNavGroup } from '@/components/app-sidebar';
-import { AnnouncementBell } from '@/components/announcement-bell';
 import { ForcePasswordChange } from '@/components/force-password-change';
 import { FullScreenLoader } from '@/components/ui/full-screen-loader';
+import { HeaderExtrasProvider } from '@/components/ui/page-header';
 import { toast } from 'sonner';
 
 interface TenantInfo {
@@ -151,12 +151,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       <main className="flex-1 min-w-0 overflow-auto">
         <div className="h-px w-full" style={{ background: `linear-gradient(90deg, transparent, ${color}, transparent)` }} />
         <div className="p-6 lg:p-8 max-w-7xl mx-auto">
-          {tenant?.id && (
-            <div className="flex justify-end mb-2">
-              <AnnouncementBell tenantId={tenant.id} brandColor={color} />
-            </div>
-          )}
-          {children}
+          <HeaderExtrasProvider value={tenant?.id ? { tenantId: tenant.id, brandColor: color } : null}>
+            {children}
+          </HeaderExtrasProvider>
         </div>
       </main>
     </div>
