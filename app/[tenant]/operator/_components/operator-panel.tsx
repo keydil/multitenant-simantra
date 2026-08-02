@@ -65,14 +65,21 @@ export default function OperatorPanel() {
     if (!selectedQueueId || !tenant) return;
 
     try {
-      // Satu call utk semua list + stats/today pengganti 4 count paralel lama
-      const [entries, statsToday] = await Promise.all([
-        queueEntryQueries.getByQueue(tenant.id, selectedQueueId, {
-          status: 'waiting,serving,no_show',
-          limit: 100,
-        }),
-        queueEntryQueries.getStatsToday(selectedQueueId),
-      ]);
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      // Satu fetch, satu scope (hari ini) → waiting-list, hold-list,
+      // currentEntry, DAN stats StatsBar semua di-derive dari array yang SAMA.
+      // Dulu StatsBar pakai getStatsToday (query terpisah, raw SQL
+      // date_trunc('day', now()) di server) sementara list ini unbounded —
+      // dua sumber independen, gampang tidak sinkron; list-nya sendiri
+      // terbukti kebanjiran data lintas-hari (nomor tiket duplikat krn nomor
+      // reset harian).
+      const entries = await queueEntryQueries.getByQueue(tenant.id, selectedQueueId, {
+        status: 'waiting,serving,completed,no_show,cancelled',
+        since: todayStart.toISOString(),
+        limit: 500,
+      });
 
       const serving = entries
         .filter(e => e.status === 'serving')
@@ -87,10 +94,10 @@ export default function OperatorPanel() {
       setWaitingEntries(entries.filter(e => e.status === 'waiting').slice(0, 15) as QueueEntry[]);
       setHoldEntries(entries.filter(e => e.status === 'no_show') as QueueEntry[]);
       setStats({
-        waiting: statsToday.waiting,
-        completed: statsToday.completed,
-        no_show: statsToday.no_show,
-        cancelled: statsToday.cancelled,
+        waiting: entries.filter(e => e.status === 'waiting').length,
+        completed: entries.filter(e => e.status === 'completed').length,
+        no_show: entries.filter(e => e.status === 'no_show').length,
+        cancelled: entries.filter(e => e.status === 'cancelled').length,
       });
     } catch {
       // network error — pertahankan state terakhir, tick berikut mencoba lagi

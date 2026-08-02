@@ -15,7 +15,7 @@ export default function HoldList({ entries }: HoldListProps) {
     <div className="bg-orange-50 rounded-2xl border border-orange-200 overflow-hidden">
       <div className="px-5 py-3 border-b border-orange-100 flex items-center gap-2">
         <PauseCircle size={16} className="text-orange-600" />
-        <h2 className="font-bold text-orange-700">Tidak Hadir ({entries.length})</h2>
+        <h2 className="font-bold text-orange-700">Tidak Hadir Hari Ini ({entries.length})</h2>
       </div>
       <div className="p-4 space-y-2">
         {entries.map(entry => (
