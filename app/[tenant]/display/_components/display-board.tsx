@@ -177,10 +177,14 @@ export default function DisplayBoard() {
   const loadData = useCallback(async () => {
     if (!tenantSlug) return;
     try {
-      // Endpoint publik: entries TANPA customer_name/notes
+      // Endpoint publik: entries TANPA customer_name/notes.
+      // 'completed' SENGAJA tidak diminta — papan ini cuma merender yang
+      // sedang dilayani & yang menunggu, sementara entri selesai menumpuk
+      // jadi ratusan baris sia-sia tiap polling (dan dulu sempat memakan
+      // habis cap 500 di server sampai tiket aktif hari ini terpotong).
       const [qData, newEntries] = await Promise.all([
         publicQueries.getQueues(tenantSlug) as Promise<Queue[]>,
-        publicQueries.getEntries(tenantSlug, 'waiting,serving,completed'),
+        publicQueries.getEntries(tenantSlug, 'waiting,serving'),
       ]);
       setQueues(qData);
 
