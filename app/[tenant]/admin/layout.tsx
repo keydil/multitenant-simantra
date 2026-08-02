@@ -54,7 +54,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const { user, loading, signingOut, signOut } = useAuth();
   const tenantSlug = params.tenant as string;
   const [tenant, setTenant] = useState<TenantInfo | null>(null);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
     if (!loading && !signingOut) {
@@ -96,17 +95,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       .catch(() => {});
   }, [tenantSlug]);
 
-  const handleLogout = async () => {
-    setIsLoggingOut(true);
-    try {
-      await signOut();
-    } catch {
-      setIsLoggingOut(false);
-    }
-  };
-
   // ── FULL SCREEN: Signing Out ──
-  if (signingOut || isLoggingOut) {
+  if (signingOut) {
     return <FullScreenLoader title="Sedang keluar..." subtitle="Menghapus sesi Anda" spinnerColor="text-blue-500" />;
   }
 
@@ -144,7 +134,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         userInitials={initials}
         userName={user.full_name || 'Admin'}
         userEmail={user.email}
-        onLogout={handleLogout}
+        onLogout={() => signOut()}
       />
 
       {/* Main */}

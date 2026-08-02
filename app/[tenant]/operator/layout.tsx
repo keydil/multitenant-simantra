@@ -22,7 +22,6 @@ export default function OperatorLayout({ children }: { children: ReactNode }) {
   const { user, loading, signingOut, signOut } = useAuth();
   const tenantSlug = params.tenant as string;
   const [tenant, setTenant] = useState<TenantInfo | null>(null);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
     if (!loading && !signingOut) {
@@ -60,17 +59,8 @@ export default function OperatorLayout({ children }: { children: ReactNode }) {
       .catch(() => {});
   }, [tenantSlug]);
 
-  const handleLogout = async () => {
-    setIsLoggingOut(true);
-    try {
-      await signOut();
-    } catch {
-      setIsLoggingOut(false);
-    }
-  };
-
   // ── Signing Out ──
-  if (signingOut || isLoggingOut) {
+  if (signingOut) {
     return <FullScreenLoader title="Sedang keluar..." subtitle="Menghapus sesi Anda" spinnerColor="text-blue-500" />;
   }
 
@@ -117,7 +107,7 @@ export default function OperatorLayout({ children }: { children: ReactNode }) {
               <p className="text-[10px] text-slate-400">{user.email}</p>
             </div>
             <button
-              onClick={handleLogout}
+              onClick={() => signOut()}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50 rounded-lg transition-all"
             >
               <LogOut className="w-3.5 h-3.5" />

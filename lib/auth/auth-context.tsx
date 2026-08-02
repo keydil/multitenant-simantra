@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 import { api, setAccessToken, refreshSession } from '@/lib/api/client';
 import { friendlyErrorMessage } from '@/lib/api/errors';
 
@@ -46,6 +47,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [signingOut, setSigningOut] = useState(false);
@@ -168,7 +170,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       // Small delay so the "Logging out" overlay is visible
       await new Promise((r) => setTimeout(r, 500));
-      window.location.href = redirectUrl;
+      // router.push (bukan window.location.href) — AuthProvider duduk di root
+      // layout dan TIDAK remount saat navigasi client-side, jadi loading/user
+      // yang sudah resolve terbawa ke halaman tujuan. Hard reload dulu
+      // memaksa AuthProvider bootstrap ulang (refreshSession() cek cookie
+      // lagi) di halaman login walau hasilnya sudah pasti "belum login" —
+      // itulah spinner kecil kedua yang tampil sesudah overlay "Sedang keluar...".
+      router.push(redirectUrl);
+      setSigningOut(false);
     } catch (err) {
       setSigningOut(false);
       setError(friendlyErrorMessage(err));
