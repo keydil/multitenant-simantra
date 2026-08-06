@@ -39,10 +39,16 @@ yarn-error.log*
 
 # env files
 .env*
+# ...kecuali contoh tanpa rahasia — ini satu-satunya dokumentasi env var
+# yang wajib di-set saat deploy.
+!.env.example
 
 # vercel
 .vercel
 .vercel/
+
+# Claude Code
+.claude/
 
 # typescript
 *.tsbuildinfo
